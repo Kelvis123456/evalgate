@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# PLACEHOLDER host, see `site` in astro.config.mjs
+Sitemap: https://docs.evalgate.example/sitemap-index.xml
