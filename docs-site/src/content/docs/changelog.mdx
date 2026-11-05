@@ -1,11 +1,39 @@
 ---
 title: Changelog
-description: Release history of evalgate. One release so far, 0.1.0.
+description: Release history of evalgate. One version so far, 0.1.0, with the first release and the audit hardening that followed it.
 ---
 
-## 0.1.0
+The version in `pyproject.toml` is still 0.1.0. The hardening below changed behaviour, but it has no version number of its own: nothing was tagged or published after the audit, so it is listed as an entry under 0.1.0 rather than as a new release.
 
-Released 2026-11-04. First and only version so far. It has not been published to PyPI and the repository has not been pushed to GitHub, so "released" here means tagged in `pyproject.toml` and `evalgate.__version__`.
+## 0.1.0, hardening after an independent audit
+
+Merged 2026-11-05 as pull request #7. Each finding was reproduced with a failing test before the fix, and the suite went from 87 to 146 tests.
+
+**Changed behaviour**
+
+- **Exit codes.** `1` now means a regression and nothing else. Bad input and errors outside the verdict exit `2` with `evalgate: error: <message>` and no traceback: malformed JSONL or baseline, non-finite numbers, an eval set that changed since the baseline, a missing baseline, a bad app spec or `--param`, an app, factory, judge or imported module that raises, unreadable or unwritable files. `EVALGATE_DEBUG=1` gives the traceback. Before, an exception inside your app exited `1`.
+- **Finite numbers only.** `NaN` and infinity are rejected in tolerances, `--tolerance`, baseline values, `--param` values and metric values. `--tolerance inf` used to make the gate accept anything.
+- **Eval set fingerprint.** `baseline.json` records the sha256 of the eval set (line endings, outer spaces and blank lines normalized) and the question count. `evalgate run` exits `2` on a mismatch, and on a baseline that has no such record.
+- **`evalgate baseline` is safer.** It keeps `k`, `default_tolerance` and per-metric `tolerances` instead of resetting them. New flags `--k` and `--tolerance` change `k` and the default tolerance. It refuses, with exit `2`, to write a baseline that has any metric lower than the existing one or missing, unless you pass `--allow-regression`. It writes `judge_score` only with `--with-judge`.
+- **Fact matching.** `answer_contains_fact` matches the gold fact as a whole token (`7 days` no longer matches `17 days`, `429` no longer matches `4290`) and ignores answers longer than 600 normalized characters (`MAX_ANSWER_CHARS`).
+- **Judge scores** must be numbers in `[0, 1]`. Anything else, including `NaN` and booleans, stops the run with exit `2`.
+- **`--param`** accepts `true` and `false` in any case and rejects `nan` and `inf`.
+- **Extra metrics** that the run produces and the baseline lacks are shown as `new (not gated)` instead of being hidden.
+- **Import path.** The current directory is put on `sys.path` explicitly, so the `evalgate` script and `python -m evalgate` resolve `--app` the same way. The README and these docs now say that importing the module named by `--app` or `EVALGATE_JUDGE` runs its import-time code.
+
+**Added**
+
+- The `citation_precision` metric: the share of distinct cited ids that are gold ids, 0 for an abstention on an answerable question, 1 for no citations on an unanswerable one. The committed baseline value is 0.9024. The other five baseline numbers did not move.
+
+**Not changed**
+
+- The baseline `abstention_accuracy` is still 0.7143. The reference answerer makes up an answer on 2 of the 7 unanswerable questions.
+- An empty answer is still the only abstention.
+- Determinism still holds for the reference app only. The gate can still be gamed in ways the README lists.
+
+## 0.1.0, first release
+
+Written 2026-11-04. It has not been published to PyPI, so "released" here means the version recorded in `pyproject.toml` and `evalgate.__version__`.
 
 **Added**
 
@@ -16,13 +44,11 @@ Released 2026-11-04. First and only version so far. It has not been published to
 - The `App` protocol (`answer(question)` returning `answer`, `cited_ids`, `retrieved_ids`), loaded with `--app module:factory` and configured with `--param`.
 - A reference RAG app with a 25-passage corpus, a stdlib BM25 retriever and an extractive answerer, plus a 41-question eval set and a committed baseline.
 - A pytest suite of 87 tests.
-- `ci.yml`, which runs the tests and the gate, and `security.yml`. Neither has run on GitHub.
+- `ci.yml`, which runs the tests and the gate, and `security.yml`.
 - A regression demo with real output for three degraded settings.
 
-**Known gaps in this release**
+**Known gaps in that first cut**, most of them fixed by the hardening above:
 
-- `evalgate baseline` resets `k`, `default_tolerance` and `tolerances` to their defaults.
-- An exception inside your app exits `1`, the same as a regression.
-- No per-question output.
-
-See [Limitations](/limitations/) for the full list.
+- `evalgate baseline` reset `k`, `default_tolerance` and `tolerances` to their defaults.
+- An exception inside your app exited `1`, the same as a regression.
+- No per-question output. This one is still true, see [Limitations](/limitations/).

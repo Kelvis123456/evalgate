@@ -15,25 +15,43 @@ This is the committed baseline of the reference app:
   "k": 3,
   "default_tolerance": 0.02,
   "tolerances": {},
+  "evalset": {
+    "sha256": "5245ea1577dba951dfe3be5954ad81b836ac9dac3ed2224f4980d1b63eae6f4d",
+    "questions": 41
+  },
   "metrics": {
     "hit_at_k": 1.0,
     "mrr": 0.985294,
     "citation_correct": 0.941176,
+    "citation_precision": 0.902439,
     "answer_contains_fact": 0.882353,
     "abstention_accuracy": 0.714286
   }
 }
 ```
 
-| Field               | Type                | Meaning                                                                  |
-| ------------------- | ------------------- | ------------------------------------------------------------------------ |
-| `version`           | integer             | Format version. Only `1` is accepted.                                    |
-| `k`                 | integer, at least 1 | The `k` used for `hit_at_k`. Defaults to `3` if absent.                  |
-| `default_tolerance` | number, at least 0  | Tolerance for any metric not listed in `tolerances`. Defaults to `0.02`. |
-| `tolerances`        | object              | Per-metric tolerances, for example `{"mrr": 0.05}`. Optional.            |
-| `metrics`           | object, non-empty   | Metric name to number. Required. Every metric listed here is gated.      |
+| Field               | Type                | Meaning                                                                                                                  |
+| ------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `version`           | integer             | Format version. Only `1` is accepted.                                                                                    |
+| `k`                 | integer, at least 1 | The `k` used for `hit_at_k`. Defaults to `3` if absent.                                                                  |
+| `default_tolerance` | number, at least 0  | Tolerance for any metric not listed in `tolerances`. Defaults to `0.02`.                                                 |
+| `tolerances`        | object              | Per-metric tolerances, for example `{"mrr": 0.05}`. Optional.                                                            |
+| `evalset`           | object              | `sha256` of the eval set and its `questions` count. Written by `evalgate baseline`. `run` refuses a baseline without it. |
+| `metrics`           | object, non-empty   | Metric name to number. Required. Every metric listed here is gated.                                                      |
 
-A baseline that is not valid JSON, has no `metrics`, has a non-numeric value, a negative tolerance or a bad `k` makes the CLI exit with code `2`.
+A baseline that is not valid JSON, has no `metrics`, has a non-numeric value, a negative tolerance or a bad `k` makes the CLI exit with code `2`. So does any `NaN`, `Infinity` or `-Infinity`: numbers in the baseline, tolerances included, must be finite.
+
+## The eval set record
+
+A baseline only means something for the eval set it was measured on. `evalgate baseline` stores a sha256 of the eval set file and the question count. The hash is taken after normalizing line endings, outer spaces on each line and blank lines, so those do not change it. Any change to a question, a gold field or the order of lines does.
+
+On every `evalgate run`, the current eval set is hashed and compared before anything runs. If it differs, the command exits `2` and names both versions:
+
+```text
+evalgate: error: eval set changed since the baseline was written (baseline: 6ccf635a6a7c, 4 questions; now: 1fbb5a576033, 3 questions). Review the change, then run 'evalgate baseline' and commit the result.
+```
+
+This is deliberate. Deleting the hard questions is the easiest way to raise a score, and now it shows up as a baseline change in review instead of passing silently. A baseline without the record is rejected the same way, with `baseline does not record its eval set; re-run 'evalgate baseline' and commit it`.
 
 ## The rule
 
@@ -48,7 +66,7 @@ A metric fails only when it drops by **strictly more** than its tolerance. So:
 
 - A drop exactly equal to the tolerance **passes**.
 - An improvement always passes, however large. It never fails the build.
-- A metric the baseline does not list is not gated, even if the run produces it.
+- A metric the baseline does not list is not gated, even if the run produces it. It still appears in the report, marked `new (not gated)`.
 
 Both numbers are rounded to 6 places before comparing. Without that, `0.7 - 0.6` is `0.09999999999999998` in floating point, and a tolerance of exactly `0.1` would flip on rounding noise.
 
@@ -62,7 +80,7 @@ In order of precedence:
 2. `tolerances[metric]` in `baseline.json`.
 3. `default_tolerance` in `baseline.json`.
 
-`--tolerance` must not be negative, and negative values in the file are rejected.
+`--tolerance` must be a finite, non-negative number (`--tolerance inf` and `nan` are rejected with exit `2`), and negative or non-finite values in the file are rejected too.
 
 ```sh
 evalgate run --tolerance 0.05
@@ -80,6 +98,14 @@ This real run used a baseline that contained `judge_score` while the judge envir
 Regressed beyond tolerance: judge_score.
 ```
 
+The opposite case is not a failure. This is the same baseline with `citation_precision` removed from `metrics`, so the run has a metric the baseline does not:
+
+```text
+| citation_precision | n/a | 0.9024 | n/a | n/a | new (not gated) |
+```
+
+A new metric never changes the verdict. It tells you there is something to add the next time you refresh the baseline.
+
 Metrics that cannot apply to your set, such as `abstention_accuracy` when there are no unanswerable questions, are written to the baseline as absent. So this rule only bites when something was measured before and is not now.
 
 ## Choosing a tolerance
@@ -96,4 +122,4 @@ To set one metric more loosely, edit `baseline.json` by hand:
 "tolerances": { "mrr": 0.05 }
 ```
 
-Be aware that `evalgate baseline` rewrites this file from scratch and empties `tolerances`. See [Update the baseline](/guides/update-baseline/).
+`evalgate baseline` keeps `k`, `default_tolerance` and your per-metric `tolerances`. `--k` changes `k` and `--tolerance` changes `default_tolerance`; neither touches `tolerances`. See [Update the baseline](/guides/update-baseline/).

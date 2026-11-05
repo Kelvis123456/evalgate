@@ -1,6 +1,6 @@
 ---
 title: Update the baseline
-description: When and how to refresh baseline.json with evalgate baseline, what the command overwrites, and how not to hide a regression.
+description: When and how to refresh baseline.json with evalgate baseline, what it keeps, what it refuses to do without --allow-regression, and how not to hide a regression.
 ---
 
 `evalgate baseline` runs the eval set against the app and writes the resulting scores to a baseline file.
@@ -13,60 +13,74 @@ evalgate baseline
 wrote baseline.json
 ```
 
-It accepts `--evalset`, `--baseline`, `--app` and `--param`, the same as `run`. It does not accept `--tolerance` or `--report-file`. It always exits `0` when the run completes, because there is nothing to compare against.
+It accepts `--evalset`, `--baseline`, `--app` and `--param`, the same as `run`, plus `--k`, `--tolerance`, `--allow-regression` and `--with-judge`. It does not accept `--report-file`. See the [CLI reference](/reference/cli/#evalgate-baseline).
 
 ## When to refresh it
 
 Refresh in the same commit as the change that justifies it:
 
 - You improved the app and want the new scores to be the floor.
-- You changed the eval set, so the old scores no longer describe the same test.
+- You changed the eval set. This one is not optional: the baseline stores the sha256 and question count of the eval set, so `evalgate run` exits `2` until you refresh.
 - You changed the app on purpose in a way that trades one metric for another and a reviewer agreed.
 
 Do not refresh it to make a red build green. The baseline is only as good as the person who last ran this command, and refreshing after a regression erases the regression.
 
-## What gets overwritten
+## What it keeps and what it rewrites
 
-The command writes the whole file from scratch. From the code, this is what it writes:
-
-- `version` is `1`.
-- `k` is **always `3`**. It does not read the old value.
-- `default_tolerance` is **always `0.02`**.
-- `tolerances` is **always `{}`**.
+- `k`, `default_tolerance` and the per-metric `tolerances` of the existing file are **kept**. With no existing file, `k` is `3` and `default_tolerance` is `0.02`.
+- `--k N` and `--tolerance X` change `k` and `default_tolerance`. Neither touches `tolerances`.
+- `evalset` is rewritten with the current sha256 and question count.
 - `metrics` is every metric the run produced, rounded to 6 places. Metrics with no applicable questions are left out.
+- `judge_score` is written **only** with `--with-judge`, which needs `EVALGATE_JUDGE` set. Otherwise a later `run` in a CI job without the judge would fail on a missing metric.
 
-Real check: a baseline edited to `"k": 5` and `"tolerances": {"mrr": 0.05}`, then rewritten with `evalgate baseline`, came back with `"k": 3` and `"tolerances": {}`. If you customise either, put them back after refreshing and look at the diff before you commit. If your gate depends on a `k` other than 3 or on per-metric tolerances, this is the sharpest edge in the tool.
+Real check: a copy of the reference baseline edited to `"k": 5` and `"tolerances": {"mrr": 0.05}`, then refreshed with `evalgate baseline`, still had `"k": 5` and `"tolerances": {"mrr": 0.05}` afterwards. Then `--k 2 --tolerance 0.05` gave `"k": 2` and `"default_tolerance": 0.05` with the `mrr` entry intact.
 
-If `EVALGATE_JUDGE` is set, `judge_score` is written too. Use the same environment for `baseline` and `run`, see [Metrics](/concepts/metrics/#judge_score).
+## It refuses to lower the bar quietly
+
+If any metric in the existing baseline would be lower in the new one, or the run no longer produces it, the command writes nothing and exits `2`. This real run degraded the reference app against a copy of its baseline:
+
+```sh
+evalgate baseline --baseline ref.json --param tokenizer=whitespace
+```
+
+```text
+evalgate: error: refusing to write a baseline that is lower than the existing baseline: hit_at_k 1.0000 -> 0.9412; mrr 0.9853 -> 0.8725; citation_correct 0.9412 -> 0.5000; citation_precision 0.9024 -> 0.5854; answer_contains_fact 0.8824 -> 0.5000. Pass --allow-regression if that is intended.
+```
+
+To accept a lower score on purpose, say so:
+
+```sh
+evalgate baseline --allow-regression
+```
+
+The flag is a speed bump, not a lock: anyone can pass it. The protection is still the diff of `baseline.json` in review.
 
 ## Review the diff
 
-The point of committing the baseline is that the change is visible. After refreshing, read it. This is the real diff from rewriting the reference baseline with `--param top_k=1`:
+The point of committing the baseline is that the change is visible. After refreshing, read it. This is the real diff from rewriting a copy of the reference baseline with `--param top_k=1 --allow-regression`:
 
 ```diff
---- baseline.json
-+++ bl.json
-@@ -4,8 +4,8 @@
-   "default_tolerance": 0.02,
-   "tolerances": {},
+@@ -8,8 +8,8 @@
+     "questions": 41
+   },
    "metrics": {
 -    "hit_at_k": 1.0,
 -    "mrr": 0.985294,
 +    "hit_at_k": 0.970588,
 +    "mrr": 0.970588,
      "citation_correct": 0.941176,
+     "citation_precision": 0.902439,
      "answer_contains_fact": 0.882353,
-     "abstention_accuracy": 0.714286
 ```
 
 Both numbers went down. A reviewer who sees that in a pull request knows the bar was lowered and can ask why. That is the whole design: the gate cannot be weakened without a visible change to a committed file.
 
-Improvements are never gated, so they only show up here, when someone chooses to refresh.
+Improvements are never gated, so they only show up here, when someone chooses to refresh. The same goes for a change to the `evalset` block: a new hash or a lower question count in the diff is the signal to ask whether hard questions were removed.
 
 ## A workflow that holds up
 
-1. Make the change to your app.
-2. `evalgate run`. If it fails, decide whether the drop is a bug or an accepted tradeoff.
+1. Make the change to your app, or to the eval set.
+2. `evalgate run`. If it fails with exit `1`, decide whether the drop is a bug or an accepted tradeoff. Exit `2` means setup, or an eval set that no longer matches the baseline.
 3. If it is a bug, fix the app. Do not touch the baseline.
-4. If it is an accepted tradeoff, run `evalgate baseline`, review the diff, and write the reason in the commit message.
-5. Restore any custom `k` or `tolerances` that the command reset.
+4. If it is an accepted tradeoff, run `evalgate baseline --allow-regression`, review the diff, and write the reason in the commit message.
+5. If you only improved things or changed the eval set, run `evalgate baseline` and review the diff, including the `evalset` block.

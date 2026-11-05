@@ -43,8 +43,8 @@ jobs:
         run: cat "$GITHUB_STEP_SUMMARY"
 ```
 
-:::caution[Not yet run on GitHub]
-Nothing has been pushed, so this workflow has never executed on GitHub. It was written to match the commands that were run locally. Treat the first real run as the test.
+:::note[It runs on GitHub]
+This workflow has run on GitHub for the repository's own pushes and pull requests, and the latest run on `main` passed (checked with `gh run list`, 2026-11-05). The `ubuntu-latest` job uses Python 3.12. The whole job, install included, took 15 seconds.
 :::
 
 ## What each part does
@@ -53,7 +53,7 @@ Nothing has been pushed, so this workflow has never executed on GitHub. It was w
 
 **`concurrency` with `cancel-in-progress: true`** cancels an older run of the same ref when you push again, so a stack of pushes does not queue a stack of gates.
 
-**`timeout-minutes: 5`** bounds a hung job. Locally the gate against the reference app takes about a third of a second, because the app is offline and the set is small. Size this for your own app.
+**`timeout-minutes: 5`** bounds a hung job. Locally the gate against the reference app takes under half a second, because the app is offline and the set is small. Size this for your own app.
 
 **Actions are pinned to commit SHAs**, with the tag in a comment. A tag can be moved; a SHA cannot.
 
@@ -61,7 +61,7 @@ Nothing has been pushed, so this workflow has never executed on GitHub. It was w
 
 **`python -m pytest`** runs the test suite first, so a broken metric function is reported as a test failure before it can confuse the gate.
 
-**`evalgate run --report-file "$GITHUB_STEP_SUMMARY"`** is the gate. The report is printed to stdout as usual and also written to the file GitHub renders on the run page. Because evalgate's report is Markdown, the table appears as a table. When the gate exits `1`, the job fails and the summary shows which metric dropped.
+**`evalgate run --report-file "$GITHUB_STEP_SUMMARY"`** is the gate. Its exit code is the verdict: `0` passes the job, `1` means a regression, `2` means bad input or an error in your app, with one line on stderr. The report is printed to stdout as usual and also written to the file GitHub renders on the run page. Because evalgate's report is Markdown, the table appears as a table. When the gate exits `1`, the job fails and the summary shows which metric dropped.
 
 **The last step** runs only on failure and prints the summary file into the log, so the table is visible without opening the summary tab.
 
@@ -78,10 +78,10 @@ Notes:
 
 - evalgate is not on PyPI. Install it from a checkout or a path your workflow can reach, and adapt the install line to however you vendor it.
 - Your app must be importable by the `evalgate` command. Installing it as a package does that, see [Plug in your own app](/guides/own-app/).
-- Commit `baseline.json` and your eval set. The gate fails with exit code `2` if the baseline is missing.
+- Commit `baseline.json` and your eval set together. The gate fails with exit code `2` if the baseline is missing, and also if the eval set differs from the sha256 recorded in the baseline, so changing questions without refreshing the baseline breaks the build on purpose.
 - Keep the app deterministic and offline in CI, or the gate will flap. If you must call a model, widen the tolerance first, see [Baseline and tolerance](/concepts/baseline-and-tolerance/#choosing-a-tolerance).
-- Add secrets only to steps that need them. The reference setup needs none.
+- Add secrets only to steps that need them. The reference setup needs none. Remember that `--app` imports and runs your module's top-level code, so do not run it on untrusted pull request code with secrets available.
 
 ## Reading the result
 
-A passing run exits `0`. A regression exits `1` and the summary names the metrics. Bad input exits `2` with `evalgate: error: ...` in the log. See [Exit codes](/concepts/exit-codes/) and [Read a failing report](/guides/read-a-report/).
+A passing run exits `0`. A regression exits `1` and the summary names the metrics. Bad input, or an exception from your app, exits `2` with `evalgate: error: ...` in the log. See [Exit codes](/concepts/exit-codes/) and [Read a failing report](/guides/read-a-report/).

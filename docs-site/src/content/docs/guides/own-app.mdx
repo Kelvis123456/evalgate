@@ -20,11 +20,13 @@ class App(Protocol):
 | `cited_ids`     | `list[str]`     | Passage ids the answer claims to rely on. Defaults to `[]` if the key is missing. |
 | `retrieved_ids` | `list[str]`     | Passage ids from retrieval, best first. Defaults to `[]` if the key is missing.   |
 
-Anything else raises an error and exits with code `2`: a non-dict result, a non-string `answer`, or an id list that is not a list of strings. The message names the question, for example `question q1: app result: 'cited_ids' must be a list of strings`.
+Anything else is an error and exits with code `2`: a non-dict result, a non-string `answer`, or an id list that is not a list of strings. The message names the question, for example `question q1: app result: 'cited_ids' must be a list of strings`.
 
-The ids must be the same ids you use in `gold_ids` in the [eval set](/concepts/eval-set/). If your app has no notion of passages, return empty lists. Then `hit_at_k`, `mrr` and `citation_correct` will be 0 and you should not keep them in the baseline. See [Limitations](/limitations/).
+The ids must be the same ids you use in `gold_ids` in the [eval set](/concepts/eval-set/). If your app has no notion of passages, return empty lists. Then `hit_at_k`, `mrr`, `citation_correct` and `citation_precision` will be 0 and you should not keep them in the baseline. See [Limitations](/limitations/).
 
-Abstention is an empty answer rather than a flag so the protocol stays at three keys and a refusal phrase never has to be matched against free text. See [Decisions](/decisions/).
+Abstention is an empty answer rather than a flag so the protocol stays at three keys and a refusal phrase never has to be matched against free text. That means an app that replies "I don't know" is scored as having answered. Wrap it so it returns an empty string in that case. See [Decisions](/decisions/).
+
+The cited ids are scored too. `citation_precision` is the share of distinct cited ids that are gold, so citing every retrieved passage lowers it. Answers longer than 600 characters never count for `answer_contains_fact`, see [Metrics](/concepts/metrics/#answer_contains_fact).
 
 ## The factory and `--param`
 
@@ -32,9 +34,9 @@ Abstention is an empty answer rather than a flag so the protocol stays at three 
 evalgate run --app mypackage.mymodule:build --param top_k=5
 ```
 
-`--app` is `module:factory`, where `module` is anything `importlib` can import. evalgate calls `factory(**params)` once per run. Each `--param KEY=VALUE` becomes a keyword argument, and the value is converted: an integer if it parses as one, else a float, else `true`/`false` become booleans, else it stays a string. `--param` may be repeated. With no `--app`, evalgate uses `evalgate.refapp:build`.
+`--app` is `module:factory`, where `module` is anything `importlib` can import. evalgate calls `factory(**params)` once per run. Each `--param KEY=VALUE` becomes a keyword argument, and the value is converted: an integer if it parses as one, else a float, else `true`/`false` (in any case) become booleans, else it stays a string. `nan` and `inf` are rejected. `--param` may be repeated. With no `--app`, evalgate uses `evalgate.refapp:build`.
 
-If the factory does not accept a parameter, or returns an object without a callable `answer`, evalgate exits with code `2`.
+If the factory does not accept a parameter, raises, or returns an object without a callable `answer`, evalgate exits with code `2`.
 
 ## A runnable example
 
@@ -106,6 +108,7 @@ python -m evalgate run --app shop:build --evalset questions.jsonl --baseline sho
 | hit_at_k | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |
 | mrr | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |
 | citation_correct | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |
+| citation_precision | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |
 | answer_contains_fact | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |
 | abstention_accuracy | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |
 
@@ -114,19 +117,17 @@ No metric dropped more than its tolerance below the baseline.
 
 Four questions is far too few for a real gate. It is here to show the contract end to end.
 
-:::caution[Make your module importable]
-Run as `python -m evalgate`, the current directory is on the import path, which is why the commands above work from the folder containing `shop.py`. The `evalgate` console script does not add it. Run from the same folder, the console script fails like this:
+:::note[Where your module is found]
+evalgate puts the current directory on `sys.path` itself, so `--app shop:build` resolves from the folder containing `shop.py` whether you run `evalgate` or `python -m evalgate`. If your app lives somewhere else, install it as a package (`pip install -e .`) or set `PYTHONPATH`.
+:::
 
-```text
-evalgate: error: cannot import 'shop': No module named 'shop'
-```
-
-Either use `python -m evalgate`, set `PYTHONPATH=.`, or install your app as a package (`pip install -e .`) so it imports from anywhere. In CI, installing the package is the usual answer. The `PYTHONPATH=. evalgate run ...` form was checked and works.
+:::caution[Importing runs your code]
+`--app` (and `EVALGATE_JUDGE`) name modules that evalgate imports, and importing runs their top-level code with your permissions, before any check. That is how the plugin mechanism works. Only point it at code you trust, and keep it out of CI jobs that run untrusted pull requests with secrets.
 :::
 
 ## Things worth knowing
 
 - The app is built once and `answer` is called once per question, in file order. Build your index in the factory, not in `answer`.
 - evalgate does no retries and has no timeout. A slow app makes a slow gate.
-- If `answer` raises, the traceback is printed and the exit code is `1`. See [Exit codes](/concepts/exit-codes/#exit-code-1-a-regression-or-a-crash-in-your-app).
+- If `answer` raises, evalgate exits `2` with `question <id>: app raised <Type>: <message>` and no traceback. Exit `1` stays reserved for a regression. See [Exit codes](/concepts/exit-codes/#a-crash-in-your-app-is-exit-2-not-1).
 - Keep the app deterministic for the gate. If it calls a model, scores will move between runs and you will have to widen the tolerance. See [Baseline and tolerance](/concepts/baseline-and-tolerance/#choosing-a-tolerance).

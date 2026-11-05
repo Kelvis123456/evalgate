@@ -56,7 +56,7 @@ The other messages, from the loader, are:
 
 ## Writing a useful set
 
-- Include unanswerable questions. Without them `abstention_accuracy` has nothing to measure and is left out of the baseline.
-- Write `gold_fact` as the short string a correct answer must contain, such as `256 KB` or `30 seconds`, not a full sentence. Matching is a substring test after normalization, see [Metrics](/concepts/metrics/#answer_contains_fact).
-- Keep the set versioned next to the app. Changing a question or its gold changes what the scores mean, so refresh the baseline in the same commit, see [Update the baseline](/guides/update-baseline/).
+- Include unanswerable questions. Without them `abstention_accuracy` has nothing to measure and is left out of the baseline. Remember that only an empty `answer` counts as abstaining.
+- Write `gold_fact` as the short string a correct answer must contain, such as `256 KB` or `30 seconds`, not a full sentence. Matching is a whole-token test after normalization, and answers over 600 characters never match, see [Metrics](/concepts/metrics/#answer_contains_fact).
+- Keep the set versioned next to the app. The baseline records the sha256 and question count of the eval set, so any change to the file makes `evalgate run` exit `2` until you refresh the baseline in the same commit, see [Update the baseline](/guides/update-baseline/). Blank lines, line endings and outer spaces on a line do not change the hash.
 - Mind the size. With 41 questions one question moves a metric by about 0.03, which is more than the default 0.02 tolerance. See [Baseline and tolerance](/concepts/baseline-and-tolerance/#choosing-a-tolerance).

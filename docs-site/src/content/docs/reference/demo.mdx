@@ -3,7 +3,7 @@ title: Reference demo
 description: Four real runs of the bundled reference app against the committed baseline, one unchanged and three deliberately broken, with the exact tables and exit codes.
 ---
 
-Everything below is the real output of the commands shown, run from the repository root against the committed `baseline.json` (2026-11-04, Windows, Python 3.14). The numbers are deterministic, so you get the same ones. The tables were reproduced again while writing this site and match the repository's `docs/demo-regression.md`.
+Everything below is the real output of the commands shown, run from the repository root against the committed `baseline.json` (2026-11-05, Windows, Python 3.14). The numbers are deterministic for the reference app, so you get the same ones. The tables were re-run while writing this site and match the repository's `docs/demo-regression.md`, including the `citation_precision` row.
 
 `main` stays green: the degraded settings are passed on the command line and are never committed.
 
@@ -28,6 +28,7 @@ evalgate run
 | hit_at_k             |   1.0000 |  1.0000 | +0.0000 |    0.0200 |  PASS  |
 | mrr                  |   0.9853 |  0.9853 | +0.0000 |    0.0200 |  PASS  |
 | citation_correct     |   0.9412 |  0.9412 | +0.0000 |    0.0200 |  PASS  |
+| citation_precision   |   0.9024 |  0.9024 | +0.0000 |    0.0200 |  PASS  |
 | answer_contains_fact |   0.8824 |  0.8824 | +0.0000 |    0.0200 |  PASS  |
 | abstention_accuracy  |   0.7143 |  0.7143 | +0.0000 |    0.0200 |  PASS  |
 
@@ -46,10 +47,11 @@ A tokenizer that splits on whitespace only, so `payload?` no longer matches `pay
 | hit_at_k             |   1.0000 |  0.9412 | -0.0588 |    0.0200 |  FAIL  |
 | mrr                  |   0.9853 |  0.8725 | -0.1127 |    0.0200 |  FAIL  |
 | citation_correct     |   0.9412 |  0.5000 | -0.4412 |    0.0200 |  FAIL  |
+| citation_precision   |   0.9024 |  0.5854 | -0.3171 |    0.0200 |  FAIL  |
 | answer_contains_fact |   0.8824 |  0.5000 | -0.3824 |    0.0200 |  FAIL  |
 | abstention_accuracy  |   0.7143 |  1.0000 | +0.2857 |    0.0200 |  PASS  |
 
-Regressed beyond tolerance: hit_at_k, mrr, citation_correct, answer_contains_fact. Exit code `1`.
+Regressed beyond tolerance: hit_at_k, mrr, citation_correct, citation_precision, answer_contains_fact. Exit code `1`.
 
 Note that `abstention_accuracy` went up. An app that finds nothing refuses everything, which looks good on that one metric. This is why the gate checks every metric in the baseline instead of one headline score.
 
@@ -64,6 +66,7 @@ evalgate run --param top_k=1
 | hit_at_k             |   1.0000 |  0.9706 | -0.0294 |    0.0200 |  FAIL  |
 | mrr                  |   0.9853 |  0.9706 | -0.0147 |    0.0200 |  PASS  |
 | citation_correct     |   0.9412 |  0.9412 | +0.0000 |    0.0200 |  PASS  |
+| citation_precision   |   0.9024 |  0.9024 | +0.0000 |    0.0200 |  PASS  |
 | answer_contains_fact |   0.8824 |  0.8824 | +0.0000 |    0.0200 |  PASS  |
 | abstention_accuracy  |   0.7143 |  0.7143 | +0.0000 |    0.0200 |  PASS  |
 
@@ -82,10 +85,11 @@ evalgate run --param min_coverage=0.9
 | hit_at_k             |   1.0000 |  1.0000 | +0.0000 |    0.0200 |  PASS  |
 | mrr                  |   0.9853 |  0.9853 | +0.0000 |    0.0200 |  PASS  |
 | citation_correct     |   0.9412 |  0.3529 | -0.5882 |    0.0200 |  FAIL  |
+| citation_precision   |   0.9024 |  0.4634 | -0.4390 |    0.0200 |  FAIL  |
 | answer_contains_fact |   0.8824 |  0.3529 | -0.5294 |    0.0200 |  FAIL  |
 | abstention_accuracy  |   0.7143 |  1.0000 | +0.2857 |    0.0200 |  PASS  |
 
-Regressed beyond tolerance: citation_correct, answer_contains_fact. Exit code `1`.
+Regressed beyond tolerance: citation_correct, citation_precision, answer_contains_fact. Exit code `1`.
 
 Retrieval is untouched, so `hit_at_k` and `mrr` pass. The answerer starts refusing questions it could answer. To learn how to read these patterns, see [Read a failing report](/guides/read-a-report/).
 
