@@ -1,0 +1,25 @@
+{"id": "p01", "title": "Overview", "text": "Tessera is a hosted job queue for background work. Jobs are JSON payloads delivered at least once to workers over HTTPS."}
+{"id": "p02", "title": "Payload size", "text": "A job payload may be at most 256 KB. Larger payloads must be uploaded to object storage and referenced by URL."}
+{"id": "p03", "title": "Visibility timeout", "text": "When a worker receives a job it becomes invisible to other workers for 30 seconds by default. The worker can extend the visibility timeout up to 12 hours with a heartbeat call."}
+{"id": "p04", "title": "Retries", "text": "Failed jobs are retried 5 times by default. The delay between attempts grows exponentially, starting at 10 seconds."}
+{"id": "p05", "title": "Dead letter queue", "text": "After the final retry a job moves to the dead letter queue. Dead letter jobs are kept for 14 days before deletion."}
+{"id": "p06", "title": "Scheduling", "text": "A job can be scheduled up to 90 days ahead with the run_at field. Scheduled jobs sit in the delay tier and count toward the queue quota."}
+{"id": "p07", "title": "Rate limits", "text": "The ingest API accepts 500 requests per second per project. Requests above the limit receive HTTP status 429 with a Retry-After header."}
+{"id": "p08", "title": "API tokens", "text": "API calls authenticate with bearer tokens created in the dashboard. A token expires after 180 days unless its owner renews it."}
+{"id": "p09", "title": "Roles", "text": "A project has three roles: viewer, operator and admin. Only admins can create or revoke API tokens."}
+{"id": "p10", "title": "Regions", "text": "Tessera runs in three regions: eu-west, us-east and ap-south. A queue lives in exactly one region and cannot be moved after creation."}
+{"id": "p11", "title": "Encryption", "text": "Payloads are encrypted at rest with AES-256. Connections accept TLS 1.3 only."}
+{"id": "p12", "title": "Idempotency", "text": "Send an idempotency key with a job to avoid duplicates. Tessera remembers each key for 24 hours per queue."}
+{"id": "p13", "title": "Priorities", "text": "Every job has a priority from 0 to 9, and 9 runs first. The default priority is 4."}
+{"id": "p14", "title": "Concurrency", "text": "A queue can cap the jobs in flight with the max_inflight setting. The default cap is 1000 jobs and the largest allowed value is 50000."}
+{"id": "p15", "title": "Pricing", "text": "The free plan includes 100000 jobs per month. Beyond that, usage costs 0.40 dollars per million jobs."}
+{"id": "p16", "title": "Uptime commitment", "text": "Paid plans carry a 99.95 percent monthly uptime commitment. Credits are issued automatically when the commitment is missed."}
+{"id": "p17", "title": "Push delivery", "text": "Push delivery sends each job as an HTTP POST to your endpoint. The endpoint must answer with a 2xx status within 15 seconds."}
+{"id": "p18", "title": "Client libraries", "text": "Official client libraries exist for Python, Go and TypeScript. The Python package is named tessera-client."}
+{"id": "p19", "title": "Command line tool", "text": "The tessera command line tool can inspect queues, replay dead letter jobs and tail logs. Install it with brew install tessera or download the binary."}
+{"id": "p20", "title": "Metrics", "text": "Queue depth and the age of the oldest job are exported every 60 seconds. They appear in the dashboard and on a Prometheus endpoint."}
+{"id": "p21", "title": "Result retention", "text": "Completed jobs are kept for 7 days so you can inspect results. An admin can shorten retention to 1 hour in the settings page."}
+{"id": "p22", "title": "Batch submit", "text": "The batch endpoint takes up to 100 jobs per call. A batch is not atomic, so every job reports its own status."}
+{"id": "p23", "title": "Ordering", "text": "Tessera does not guarantee global ordering. Jobs that share a group_id are delivered one at a time, in arrival order."}
+{"id": "p24", "title": "Support", "text": "Support tickets on the Team plan are answered within 8 business hours. Enterprise customers get a 1 hour response during outages."}
+{"id": "p25", "title": "Deleting a queue", "text": "Deleting a queue is permanent and removes every pending job. An admin must type the queue name to confirm."}

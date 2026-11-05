@@ -1,0 +1,41 @@
+{"id": "q01", "question": "What is the maximum size of a job payload?", "gold_ids": ["p02"], "gold_fact": "256 KB"}
+{"id": "q02", "question": "How long is a job invisible to other workers after a worker receives it by default?", "gold_ids": ["p03"], "gold_fact": "30 seconds"}
+{"id": "q03", "question": "How far can the visibility timeout be extended?", "gold_ids": ["p03"], "gold_fact": "12 hours"}
+{"id": "q04", "question": "How many times is a failed job retried by default?", "gold_ids": ["p04"], "gold_fact": "5 times"}
+{"id": "q05", "question": "How long is the delay before the first retry attempt?", "gold_ids": ["p04"], "gold_fact": "10 seconds"}
+{"id": "q06", "question": "How long are dead letter jobs kept before deletion?", "gold_ids": ["p05"], "gold_fact": "14 days"}
+{"id": "q07", "question": "How far ahead can I schedule a job?", "gold_ids": ["p06"], "gold_fact": "90 days"}
+{"id": "q08", "question": "What request rate does the ingest API accept per project?", "gold_ids": ["p07"], "gold_fact": "500 requests per second"}
+{"id": "q09", "question": "Which HTTP status do requests above the limit receive?", "gold_ids": ["p07"], "gold_fact": "429"}
+{"id": "q10", "question": "After how many days does an API token expire?", "gold_ids": ["p08"], "gold_fact": "180 days"}
+{"id": "q11", "question": "Which role can create or revoke API tokens?", "gold_ids": ["p09"], "gold_fact": "Only admins"}
+{"id": "q12", "question": "Which regions does Tessera run in?", "gold_ids": ["p10"], "gold_fact": "ap-south"}
+{"id": "q13", "question": "Can a queue be moved to another region after creation?", "gold_ids": ["p10"], "gold_fact": "cannot be moved"}
+{"id": "q14", "question": "What encryption protects payloads at rest?", "gold_ids": ["p11"], "gold_fact": "AES-256"}
+{"id": "q15", "question": "Which TLS version do connections accept?", "gold_ids": ["p11"], "gold_fact": "TLS 1.3"}
+{"id": "q16", "question": "How long does Tessera remember an idempotency key?", "gold_ids": ["p12"], "gold_fact": "24 hours"}
+{"id": "q17", "question": "What is the default job priority?", "gold_ids": ["p13"], "gold_fact": "default priority is 4"}
+{"id": "q18", "question": "Which priority value runs first?", "gold_ids": ["p13"], "gold_fact": "9 runs first"}
+{"id": "q19", "question": "What is the default max_inflight cap?", "gold_ids": ["p14"], "gold_fact": "1000 jobs"}
+{"id": "q20", "question": "How many jobs per month does the free plan include?", "gold_ids": ["p15"], "gold_fact": "100000 jobs"}
+{"id": "q21", "question": "What does usage cost beyond the free plan?", "gold_ids": ["p15"], "gold_fact": "0.40 dollars"}
+{"id": "q22", "question": "What monthly uptime commitment do paid plans carry?", "gold_ids": ["p16"], "gold_fact": "99.95 percent"}
+{"id": "q23", "question": "How quickly must a push delivery endpoint answer?", "gold_ids": ["p17"], "gold_fact": "15 seconds"}
+{"id": "q24", "question": "Which languages have official client libraries?", "gold_ids": ["p18"], "gold_fact": "Python, Go and TypeScript"}
+{"id": "q25", "question": "What is the Python package called?", "gold_ids": ["p18"], "gold_fact": "tessera-client"}
+{"id": "q26", "question": "How do I install the command line tool?", "gold_ids": ["p19"], "gold_fact": "brew install tessera"}
+{"id": "q27", "question": "How often are queue depth metrics exported?", "gold_ids": ["p20"], "gold_fact": "60 seconds"}
+{"id": "q28", "question": "How long are completed jobs kept?", "gold_ids": ["p21"], "gold_fact": "7 days"}
+{"id": "q29", "question": "How many jobs does the batch endpoint take per call?", "gold_ids": ["p22"], "gold_fact": "100 jobs"}
+{"id": "q30", "question": "Does Tessera guarantee global ordering?", "gold_ids": ["p23"], "gold_fact": "does not guarantee global ordering"}
+{"id": "q31", "question": "How are jobs that share a group_id delivered?", "gold_ids": ["p23"], "gold_fact": "one at a time"}
+{"id": "q32", "question": "How fast are Team plan support tickets answered?", "gold_ids": ["p24"], "gold_fact": "8 business hours"}
+{"id": "q33", "question": "What must an admin type to confirm deleting a queue?", "gold_ids": ["p25"], "gold_fact": "queue name"}
+{"id": "q34", "question": "What format are job payloads in?", "gold_ids": ["p01"], "gold_fact": "JSON payloads"}
+{"id": "u01", "question": "Does Tessera offer a GraphQL API?", "answerable": false}
+{"id": "u02", "question": "What does the Enterprise plan cost per month?", "answerable": false}
+{"id": "u03", "question": "Can I run Tessera on my own Kubernetes cluster?", "answerable": false}
+{"id": "u04", "question": "Who founded Tessera?", "answerable": false}
+{"id": "u05", "question": "Is there an official Ruby client library?", "answerable": false}
+{"id": "u06", "question": "How many queues can one project have?", "answerable": false}
+{"id": "u07", "question": "Is Tessera SOC 2 certified?", "answerable": false}

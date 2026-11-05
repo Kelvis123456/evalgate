@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "k": 3,
+  "default_tolerance": 0.02,
+  "tolerances": {},
+  "metrics": {
+    "hit_at_k": 1.0,
+    "mrr": 0.985294,
+    "citation_correct": 0.882353,
+    "answer_contains_fact": 0.794118,
+    "abstention_accuracy": 0.714286
+  }
+}
