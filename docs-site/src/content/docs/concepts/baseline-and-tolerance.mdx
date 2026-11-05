@@ -1,0 +1,99 @@
+---
+title: Baseline and tolerance
+description: What baseline.json contains, the exact rule that decides whether a metric fails, how tolerances are set, and what a missing metric does.
+---
+
+## The baseline file
+
+`baseline.json` holds the scores from a run you accepted as good. You commit it. The gate compares every later run to it, so the bar only rises when someone changes the file on purpose, in a diff a reviewer can read.
+
+This is the committed baseline of the reference app:
+
+```json
+{
+  "version": 1,
+  "k": 3,
+  "default_tolerance": 0.02,
+  "tolerances": {},
+  "metrics": {
+    "hit_at_k": 1.0,
+    "mrr": 0.985294,
+    "citation_correct": 0.941176,
+    "answer_contains_fact": 0.882353,
+    "abstention_accuracy": 0.714286
+  }
+}
+```
+
+| Field               | Type                | Meaning                                                                  |
+| ------------------- | ------------------- | ------------------------------------------------------------------------ |
+| `version`           | integer             | Format version. Only `1` is accepted.                                    |
+| `k`                 | integer, at least 1 | The `k` used for `hit_at_k`. Defaults to `3` if absent.                  |
+| `default_tolerance` | number, at least 0  | Tolerance for any metric not listed in `tolerances`. Defaults to `0.02`. |
+| `tolerances`        | object              | Per-metric tolerances, for example `{"mrr": 0.05}`. Optional.            |
+| `metrics`           | object, non-empty   | Metric name to number. Required. Every metric listed here is gated.      |
+
+A baseline that is not valid JSON, has no `metrics`, has a non-numeric value, a negative tolerance or a bad `k` makes the CLI exit with code `2`.
+
+## The rule
+
+For each metric in the baseline:
+
+```text
+delta   = round(current - baseline, 6)
+passes  = round(-delta, 6) <= tolerance
+```
+
+A metric fails only when it drops by **strictly more** than its tolerance. So:
+
+- A drop exactly equal to the tolerance **passes**.
+- An improvement always passes, however large. It never fails the build.
+- A metric the baseline does not list is not gated, even if the run produces it.
+
+Both numbers are rounded to 6 places before comparing. Without that, `0.7 - 0.6` is `0.09999999999999998` in floating point, and a tolerance of exactly `0.1` would flip on rounding noise.
+
+The overall result is PASS only if every row passes.
+
+## Where the tolerance comes from
+
+In order of precedence:
+
+1. `--tolerance X` on `evalgate run`, which overrides **every** metric, including per-metric values in the file.
+2. `tolerances[metric]` in `baseline.json`.
+3. `default_tolerance` in `baseline.json`.
+
+`--tolerance` must not be negative, and negative values in the file are rejected.
+
+```sh
+evalgate run --tolerance 0.05
+```
+
+## Missing metrics
+
+If the baseline lists a metric and the current run does not produce it, that row is `missing` and it **fails**. The easiest way to pass a gate is to stop measuring what regressed, so evalgate does not allow it.
+
+This real run used a baseline that contained `judge_score` while the judge environment variable was unset:
+
+```text
+| judge_score | 0.9069 | missing | n/a | 0.0200 | FAIL |
+
+Regressed beyond tolerance: judge_score.
+```
+
+Metrics that cannot apply to your set, such as `abstention_accuracy` when there are no unanswerable questions, are written to the baseline as absent. So this rule only bites when something was measured before and is not now.
+
+## Choosing a tolerance
+
+The default of 0.02 is a number, not a statistical claim. evalgate uses a fixed tolerance and has no significance test.
+
+What matters is your set size. Each question moves a metric by `1 / n`. With the 34 answerable questions in the reference set, one question moves `hit_at_k` by about 0.029, which is more than 0.02, so one lost question fails the gate. With 200 answerable questions, one question moves it by 0.005 and a tolerance of 0.02 would let four slip through.
+
+Decide how many questions you are willing to lose, convert that to a number and write it as the tolerance. If an LLM judge or a nondeterministic app makes scores wobble from run to run, set the tolerance above the wobble you measure, or the gate will flap and people will stop trusting it.
+
+To set one metric more loosely, edit `baseline.json` by hand:
+
+```json
+"tolerances": { "mrr": 0.05 }
+```
+
+Be aware that `evalgate baseline` rewrites this file from scratch and empties `tolerances`. See [Update the baseline](/guides/update-baseline/).

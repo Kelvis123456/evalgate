@@ -1,0 +1,62 @@
+---
+title: Eval set format
+description: The JSONL format evalgate reads, which fields are required, and every validation error it can raise with the exact line number.
+---
+
+An eval set is a UTF-8 text file with one JSON object per line. The default path is `evals/questions.jsonl`; change it with `--evalset`. Blank lines are skipped. There is no comment syntax.
+
+## Two kinds of line
+
+An **answerable** question has gold data: the passage ids a correct answer should retrieve and cite, and a fact the answer text must contain.
+
+```text title="eval set line"
+{"id": "q01", "question": "What is the maximum size of a job payload?", "gold_ids": ["p02"], "gold_fact": "256 KB"}
+```
+
+An **unanswerable** question has no gold. The app is expected to abstain, which means returning an empty `answer` string.
+
+```text title="eval set line"
+{"id": "u01", "question": "Does Tessera offer a GraphQL API?", "answerable": false}
+```
+
+## Fields
+
+| Field        | Type            | Rule                                                                                                      |
+| ------------ | --------------- | --------------------------------------------------------------------------------------------------------- |
+| `id`         | string          | Required, non-empty (whitespace-only does not count). Unique within the file.                             |
+| `question`   | string          | Required, non-empty. This is what your app receives.                                                      |
+| `answerable` | boolean         | Optional, defaults to `true`. Must be a real JSON `true` or `false`.                                      |
+| `gold_ids`   | list of strings | Optional, defaults to `[]`. Every entry must be a non-empty string. Required (non-empty) when answerable. |
+| `gold_fact`  | string          | Optional. Non-empty if present. Required when answerable.                                                 |
+
+An unanswerable question must not carry `gold_ids` or `gold_fact`. Unknown extra keys are ignored.
+
+`gold_ids` is a list because more than one passage can contain the answer. A retrieval or citation hit on any one of them counts. See [Metrics](/concepts/metrics/).
+
+## What happens on bad input
+
+Loading stops at the first problem and the CLI exits with code `2`. Each message starts with `file:line` so you can jump to it:
+
+```text
+bad.jsonl:2: invalid JSON (Expecting value)
+dup.jsonl:2: duplicate question id 'q1' (first seen on line 1)
+```
+
+The other messages, from the loader, are:
+
+- `<where>: expected a JSON object`
+- `<where>: 'id' must be a non-empty string` (same for `question`)
+- `<where>: 'answerable' must be true or false`
+- `<where>: 'gold_ids' must be a list of non-empty strings`
+- `<where>: 'gold_fact' must be a non-empty string or absent`
+- `<where>: an answerable question needs gold_ids and gold_fact`
+- `<where>: an unanswerable question must not have gold_ids or gold_fact`
+- `<source>: eval set is empty`
+- `cannot read eval set <path>: <reason>`
+
+## Writing a useful set
+
+- Include unanswerable questions. Without them `abstention_accuracy` has nothing to measure and is left out of the baseline.
+- Write `gold_fact` as the short string a correct answer must contain, such as `256 KB` or `30 seconds`, not a full sentence. Matching is a substring test after normalization, see [Metrics](/concepts/metrics/#answer_contains_fact).
+- Keep the set versioned next to the app. Changing a question or its gold changes what the scores mean, so refresh the baseline in the same commit, see [Update the baseline](/guides/update-baseline/).
+- Mind the size. With 41 questions one question moves a metric by about 0.03, which is more than the default 0.02 tolerance. See [Baseline and tolerance](/concepts/baseline-and-tolerance/#choosing-a-tolerance).

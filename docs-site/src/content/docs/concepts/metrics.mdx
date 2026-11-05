@@ -1,0 +1,77 @@
+---
+title: Metrics
+description: Exactly how evalgate computes hit_at_k, mrr, citation_correct, answer_contains_fact, abstention_accuracy and the optional judge_score.
+---
+
+Every metric is computed offline from what your app returned for each question. No metric calls a model unless you opt into the [judge](#judge_score).
+
+## How scores are aggregated
+
+Each question is scored individually, then each metric is the **mean over the questions it applies to**, rounded to 6 decimal places. Rounding means float noise never decides a gate.
+
+| Question kind | Contributes to                                                |
+| ------------- | ------------------------------------------------------------- |
+| Answerable    | `hit_at_k`, `mrr`, `citation_correct`, `answer_contains_fact` |
+| Unanswerable  | `abstention_accuracy` only                                    |
+
+If no question applies to a metric (for example, an eval set with no unanswerable questions), that metric has no value. It is left out of the baseline file when you write one, and it is not reported as a score. If the baseline already contains it but a later run cannot produce it, the gate fails, see [Baseline and tolerance](/concepts/baseline-and-tolerance/#missing-metrics).
+
+In the shipped set of 41 questions, 34 are answerable and 7 are unanswerable.
+
+An app **abstains** when its `answer`, after `strip()`, is empty. A whitespace-only answer is an abstention.
+
+## hit_at_k
+
+Did retrieval surface a gold passage in the top `k`?
+
+For an answerable question: `1.0` if any id in the first `k` entries of `retrieved_ids` is in `gold_ids`, else `0.0`. `k` is read from `baseline.json` (field `k`, default `3`). It is a retrieval metric, so it does not look at the answer text. An app that retrieves the right passage and then abstains still gets a hit.
+
+## mrr
+
+Mean reciprocal rank. How high is the first gold passage?
+
+For an answerable question: scan the **whole** `retrieved_ids` list, not just the first `k`. At the first gold id found at 1-based position `rank`, the score is `1 / rank`. If no gold id appears, the score is `0.0`. A gold passage at position 1 scores 1.0, at 2 scores 0.5, at 4 scores 0.25.
+
+## citation_correct
+
+Did the app cite a gold passage, and did it actually answer?
+
+For an answerable question: `1.0` if the app did **not** abstain **and** at least one id in `cited_ids` is in `gold_ids`; otherwise `0.0`. It checks the id the app reports. It does not check whether the cited text supports the answer.
+
+## answer_contains_fact
+
+Does the answer contain the gold fact?
+
+For an answerable question: `1.0` if the normalized `gold_fact` is a substring of the normalized `answer`, else `0.0`. Normalization is, in order:
+
+1. Unicode NFKC normalization.
+2. `casefold()`.
+3. Every run of whitespace collapsed to a single space.
+4. Leading and trailing whitespace stripped.
+
+So a gold fact of `256 KB` matches `The limit is 256 KB.`, `the limit is 256 kb`, and a sentence where the space before KB is a non-breaking space. The test is a plain substring check with no word boundaries, so a gold fact of `30 days` also matches an answer that says `130 days`. Keep gold facts specific.
+
+## abstention_accuracy
+
+Does the app refuse when there is nothing to find?
+
+For an unanswerable question: `1.0` if the app abstained (empty answer), else `0.0`.
+
+This metric can go up when an app breaks. An app that retrieves nothing useful refuses everything, which scores 1.0 here. That is why the gate checks every metric in the baseline, not one headline number. The [reference demo](/reference/demo/#2-broken-tokenization-tokenizerwhitespace) shows exactly this.
+
+## judge_score
+
+Optional, off by default, and never used in this repository's CI.
+
+Set the environment variable `EVALGATE_JUDGE=module:factory`. The factory takes no arguments and must return an object with `score(question, answer, gold_fact) -> float`, in `[0, 1]` by convention. For each answerable question evalgate calls it and adds a `judge_score` metric, the mean of the returned scores rounded to 6 places.
+
+evalgate ships the interface and one stub, `evalgate.judge.OverlapStubJudge`, which is the fraction of gold-fact words found in the answer. It is not an LLM and is not a good judge. It exists to show the shape of the interface. There is no vendor client in the package. If you wire in a real model, you own the cost, the nondeterminism and the key.
+
+If the variable is set and the factory returns something without a callable `score`, evalgate exits with code `2`.
+
+<details>
+<summary>What the code does with a judge</summary>
+
+`judge_score` is added to the run's metrics, so `evalgate baseline` writes it into `baseline.json` when the variable is set, and `evalgate run` with the variable unset then reports it as missing and fails. Use the same environment for both commands.
+
+</details>
