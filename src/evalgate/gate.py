@@ -19,6 +19,8 @@ class Baseline:
     default_tolerance: float
     tolerances: dict[str, float]
     k: int
+    evalset_sha256: str | None = None
+    questions: int | None = None
 
 
 @dataclass(frozen=True)
@@ -60,7 +62,14 @@ def parse_baseline(text: str, source: str = "<string>") -> Baseline:
         raise EvalGateError(f"{source}: 'k' must be a positive integer")
     if default < 0 or any(t < 0 for t in tolerances.values()):
         raise EvalGateError(f"{source}: tolerances must not be negative")
-    return Baseline(metrics, default, tolerances, k)
+    ev = raw.get("evalset")
+    sha, count = None, None
+    if ev is not None:
+        if (not isinstance(ev, dict) or not isinstance(ev.get("sha256"), str)
+                or isinstance(ev.get("questions"), bool) or not isinstance(ev.get("questions"), int)):
+            raise EvalGateError(f"{source}: 'evalset' must be {{\"sha256\": str, \"questions\": int}}")
+        sha, count = ev["sha256"], ev["questions"]
+    return Baseline(metrics, default, tolerances, k, sha, count)
 
 
 def load_baseline(path: str | Path) -> Baseline:
@@ -73,11 +82,27 @@ def load_baseline(path: str | Path) -> Baseline:
 
 
 def write_baseline(path: str | Path, metrics: dict[str, float | None], k: int,
-                   default_tolerance: float = DEFAULT_TOLERANCE) -> None:
+                   default_tolerance: float = DEFAULT_TOLERANCE,
+                   evalset: tuple[str, int] | None = None) -> None:
     clean = {n: v for n, v in metrics.items() if v is not None}
-    payload = {"version": BASELINE_VERSION, "k": k, "default_tolerance": default_tolerance,
-               "tolerances": {}, "metrics": clean}
+    payload: dict = {"version": BASELINE_VERSION, "k": k, "default_tolerance": default_tolerance,
+                     "tolerances": {}}
+    if evalset is not None:
+        payload["evalset"] = {"sha256": evalset[0], "questions": evalset[1]}
+    payload["metrics"] = clean
     Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def check_evalset(baseline: Baseline, sha256: str, questions: int) -> None:
+    """The baseline only means something for the eval set it was measured on."""
+    if baseline.evalset_sha256 is None:
+        raise EvalGateError("baseline does not record its eval set; re-run 'evalgate baseline' and commit it")
+    if baseline.evalset_sha256 != sha256:
+        raise EvalGateError(
+            f"eval set changed since the baseline was written (baseline: {baseline.evalset_sha256[:12]}, "
+            f"{baseline.questions} questions; now: {sha256[:12]}, {questions} questions). "
+            "Review the change, then run 'evalgate baseline' and commit the result."
+        )
 
 
 def compare(baseline: Baseline, current: dict[str, float | None],

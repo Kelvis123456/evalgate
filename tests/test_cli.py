@@ -1,4 +1,5 @@
 import json
+import pathlib
 import sys
 import types
 
@@ -7,7 +8,7 @@ import pytest
 from evalgate.app import load_app, normalize_result, parse_params
 from evalgate.cli import main
 from evalgate.errors import EvalGateError
-from evalgate.evalset import Question
+from evalgate.evalset import Question, fingerprint
 from evalgate.judge import OverlapStubJudge, judge_from_env
 from evalgate.runner import run_evalset
 
@@ -42,9 +43,11 @@ def write_set(tmp_path):
     return str(p)
 
 
-def write_base(tmp_path, metrics, **extra):
+def write_base(tmp_path, metrics, evalset="evals/questions.jsonl", **extra):
+    text = pathlib.Path(evalset).read_text(encoding="utf-8")
+    ev = {"sha256": fingerprint(text), "questions": len([x for x in text.splitlines() if x.strip()])}
     p = tmp_path / "b.json"
-    p.write_text(json.dumps({"metrics": metrics, **extra}), encoding="utf-8")
+    p.write_text(json.dumps({"metrics": metrics, "evalset": ev, **extra}), encoding="utf-8")
     return str(p)
 
 
@@ -70,7 +73,7 @@ def test_report_file_is_written(tmp_path):
 def test_always_answering_app_fails_on_abstention(plug, tmp_path, capsys):
     mod = sys.modules["plugapp"]
     mod.build = lambda: Fixed("It is 256 KB", ["p1"], ["p1"])
-    base = write_base(tmp_path, {"hit_at_k": 1.0, "abstention_accuracy": 1.0})
+    base = write_base(tmp_path, {"hit_at_k": 1.0, "abstention_accuracy": 1.0}, write_set(tmp_path))
     assert main(["run", "--evalset", write_set(tmp_path), "--baseline", base, "--app", "plugapp:build"]) == 1
     out = capsys.readouterr().out
     assert "| hit_at_k | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |" in out
@@ -88,7 +91,8 @@ def test_list_valued_results_pass(plug, tmp_path, capsys):
 
     mod.build = lambda: Good()
     base = write_base(tmp_path, {"hit_at_k": 1.0, "mrr": 1.0, "citation_correct": 1.0,
-                                 "answer_contains_fact": 1.0, "abstention_accuracy": 1.0})
+                                 "answer_contains_fact": 1.0, "abstention_accuracy": 1.0},
+                      write_set(tmp_path))
     assert main(["run", "--evalset", write_set(tmp_path), "--baseline", base, "--app", "plugapp:build"]) == 0
     assert "| mrr | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |" in capsys.readouterr().out
 

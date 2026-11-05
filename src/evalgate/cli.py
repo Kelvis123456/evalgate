@@ -10,8 +10,8 @@ from pathlib import Path
 from . import __version__
 from .app import load_app, parse_params
 from .errors import EvalGateError
-from .evalset import load_evalset
-from .gate import Baseline, compare, load_baseline, passed, render_markdown, write_baseline
+from .evalset import load_evalset_with_fingerprint
+from .gate import Baseline, check_evalset, compare, load_baseline, passed, render_markdown, write_baseline
 from .judge import judge_from_env
 from .runner import run_evalset
 
@@ -38,18 +38,19 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _run(args: argparse.Namespace) -> int:
-    questions = load_evalset(args.evalset)
+    questions, digest = load_evalset_with_fingerprint(args.evalset)
     app = load_app(args.app, parse_params(args.param))
     judge = judge_from_env()
     if args.command == "baseline":
         k = 3
         result = run_evalset(app, questions, k=k, judge=judge)
-        write_baseline(args.baseline, result.metrics, k)
+        write_baseline(args.baseline, result.metrics, k, evalset=(digest, len(questions)))
         print(f"wrote {args.baseline}")
         return 0
     baseline: Baseline = load_baseline(args.baseline)
     if args.tolerance is not None and (not math.isfinite(args.tolerance) or args.tolerance < 0):
         raise EvalGateError("--tolerance must be a finite number, not negative")
+    check_evalset(baseline, digest, len(questions))
     result = run_evalset(app, questions, k=baseline.k, judge=judge)
     rows = compare(baseline, result.metrics, args.tolerance)
     report = render_markdown(rows)
