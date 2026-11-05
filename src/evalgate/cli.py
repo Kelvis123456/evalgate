@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -91,16 +92,33 @@ def _run(args: argparse.Namespace) -> int:
     report = render_markdown(rows)
     sys.stdout.write(report)
     if args.report_file:
-        Path(args.report_file).write_text(report, encoding="utf-8")
+        try:
+            Path(args.report_file).write_text(report, encoding="utf-8")
+        except OSError as exc:
+            raise EvalGateError(f"cannot write report {args.report_file}: {exc.strerror or exc}") from exc
     return 0 if passed(rows) else 1
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    # The `evalgate` script does not put the cwd on sys.path (python -m does), so do it
+    # explicitly: --app mymodule:build then resolves the same way for both.
+    cwd = os.getcwd()
+    if cwd not in sys.path and "" not in sys.path:
+        sys.path.insert(0, cwd)
     try:
         return _run(args)
     except EvalGateError as exc:
+        if os.environ.get("EVALGATE_DEBUG"):
+            raise
         print(f"evalgate: error: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        # exit 1 is reserved for "quality regressed", so nothing else may end up there
+        if os.environ.get("EVALGATE_DEBUG"):
+            raise
+        print(f"evalgate: error: unexpected {type(exc).__name__}: {exc} "
+              "(set EVALGATE_DEBUG=1 for the traceback)", file=sys.stderr)
         return 2
 
 

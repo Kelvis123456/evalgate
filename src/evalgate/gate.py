@@ -78,7 +78,11 @@ def load_baseline(path: str | Path) -> Baseline:
         raise EvalGateError(
             f"baseline not found: {p}. Create one with 'evalgate baseline' and commit it."
         )
-    return parse_baseline(p.read_text(encoding="utf-8"), str(p))
+    try:
+        text = p.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise EvalGateError(f"cannot read baseline {p}: {exc}") from exc
+    return parse_baseline(text, str(p))
 
 
 def write_baseline(path: str | Path, metrics: dict[str, float | None], k: int,
@@ -91,7 +95,10 @@ def write_baseline(path: str | Path, metrics: dict[str, float | None], k: int,
     if evalset is not None:
         payload["evalset"] = {"sha256": evalset[0], "questions": evalset[1]}
     payload["metrics"] = clean
-    Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    try:
+        Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        raise EvalGateError(f"cannot write baseline {path}: {exc.strerror or exc}") from exc
 
 
 def lower_metrics(old: Baseline, new: dict[str, float | None]) -> list[str]:

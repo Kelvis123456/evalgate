@@ -82,6 +82,8 @@ def load_evalset_with_fingerprint(path: str | Path) -> tuple[list[Question], str
         text = p.read_text(encoding="utf-8")
     except OSError as exc:
         raise EvalGateError(f"cannot read eval set {p}: {exc.strerror or exc}") from exc
+    except UnicodeDecodeError as exc:
+        raise EvalGateError(f"cannot read eval set {p}: not valid UTF-8 ({exc.reason} at byte {exc.start})") from exc
     return parse_evalset(text, str(p)), fingerprint(text)
 
 
