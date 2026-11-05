@@ -77,6 +77,8 @@ def load_factory(spec: str):
     if not sep or not module_name or not attr:
         raise EvalGateError(f"bad app spec '{spec}', expected module:factory")
     try:
+        # Importing a module named by the user on their own command line is the plugin mechanism.
+        # nosemgrep: python.lang.security.audit.non-literal-import.non-literal-import
         module = importlib.import_module(module_name)
     except ImportError as exc:
         raise EvalGateError(f"cannot import '{module_name}': {exc}") from exc
