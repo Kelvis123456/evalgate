@@ -8,16 +8,17 @@ const css = readFileSync(
   "utf8",
 );
 
-function tokens(selectorPattern) {
-  const block =
-    css.match(new RegExp(selectorPattern + String.raw`\s*\{([^}]*)\}`))?.[1] ??
-    "";
+function tokens(block) {
   return Object.fromEntries(
     [...block.matchAll(/(--[\w-]+):\s*(#[0-9a-fA-F]{6}|var\(--[\w-]+\))/g)].map(
       (m) => [m[1], m[2]],
     ),
   );
 }
+
+const darkBlock = css.match(/:root\s*\{([^}]*)\}/)?.[1] ?? "";
+const lightBlock =
+  css.match(/:root\[data-theme=['"]light['"]\]\s*\{([^}]*)\}/)?.[1] ?? "";
 
 // Values may be var(--other); resolve them within the theme.
 function resolve(map) {
@@ -29,11 +30,11 @@ function resolve(map) {
   }
   return out;
 }
-const base = tokens(String.raw`:root`);
+const base = tokens(darkBlock);
 const dark = resolve(base);
 const light = resolve({
   ...base,
-  ...tokens(String.raw`:root\[data-theme=['"]light['"]\]`),
+  ...tokens(lightBlock),
 });
 
 const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
