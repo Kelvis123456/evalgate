@@ -6,8 +6,8 @@
   "metrics": {
     "hit_at_k": 1.0,
     "mrr": 0.985294,
-    "citation_correct": 0.882353,
-    "answer_contains_fact": 0.794118,
+    "citation_correct": 0.941176,
+    "answer_contains_fact": 0.882353,
     "abstention_accuracy": 0.714286
   }
 }
