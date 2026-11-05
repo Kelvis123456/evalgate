@@ -83,14 +83,27 @@ def load_baseline(path: str | Path) -> Baseline:
 
 def write_baseline(path: str | Path, metrics: dict[str, float | None], k: int,
                    default_tolerance: float = DEFAULT_TOLERANCE,
-                   evalset: tuple[str, int] | None = None) -> None:
+                   evalset: tuple[str, int] | None = None,
+                   tolerances: dict[str, float] | None = None) -> None:
     clean = {n: v for n, v in metrics.items() if v is not None}
     payload: dict = {"version": BASELINE_VERSION, "k": k, "default_tolerance": default_tolerance,
-                     "tolerances": {}}
+                     "tolerances": tolerances or {}}
     if evalset is not None:
         payload["evalset"] = {"sha256": evalset[0], "questions": evalset[1]}
     payload["metrics"] = clean
     Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def lower_metrics(old: Baseline, new: dict[str, float | None]) -> list[str]:
+    """Describe every metric in `old` that `new` lowers or no longer produces."""
+    out = []
+    for name, was in old.metrics.items():
+        now = new.get(name)
+        if now is None:
+            out.append(f"{name} {was:.4f} -> missing")
+        elif now < was:
+            out.append(f"{name} {was:.4f} -> {now:.4f}")
+    return out
 
 
 def check_evalset(baseline: Baseline, sha256: str, questions: int) -> None:

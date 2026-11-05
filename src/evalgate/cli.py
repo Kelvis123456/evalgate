@@ -11,7 +11,10 @@ from . import __version__
 from .app import load_app, parse_params
 from .errors import EvalGateError
 from .evalset import load_evalset_with_fingerprint
-from .gate import Baseline, check_evalset, compare, load_baseline, passed, render_markdown, write_baseline
+from .gate import (
+    DEFAULT_TOLERANCE, Baseline, check_evalset, compare, load_baseline, lower_metrics, passed,
+    render_markdown, write_baseline,
+)
 from .judge import judge_from_env
 from .runner import run_evalset
 
@@ -34,22 +37,54 @@ def _parser() -> argparse.ArgumentParser:
             s.add_argument("--tolerance", type=float, default=None,
                            help="override every tolerance in the baseline")
             s.add_argument("--report-file", help="also write the Markdown report here")
+        else:
+            s.add_argument("--k", type=int, default=None,
+                           help="k for hit_at_k (default: keep the existing baseline's k, else 3)")
+            s.add_argument("--tolerance", type=float, default=None,
+                           help="default tolerance (default: keep the existing one, else 0.02)")
+            s.add_argument("--allow-regression", action="store_true",
+                           help="write the baseline even if a metric is lower than the existing one")
+            s.add_argument("--with-judge", action="store_true",
+                           help="run the EVALGATE_JUDGE judge and store judge_score")
     return p
+
+
+def _write_baseline(args: argparse.Namespace, app, questions, digest: str) -> int:
+    existing = load_baseline(args.baseline) if Path(args.baseline).is_file() else None
+    k = args.k if args.k is not None else (existing.k if existing else 3)
+    if k < 1:
+        raise EvalGateError("--k must be at least 1")
+    tolerance = args.tolerance if args.tolerance is not None else (
+        existing.default_tolerance if existing else DEFAULT_TOLERANCE)
+    judge = None
+    if args.with_judge:
+        judge = judge_from_env()
+        if judge is None:
+            raise EvalGateError("--with-judge needs EVALGATE_JUDGE=module:factory")
+    result = run_evalset(app, questions, k=k, judge=judge)
+    if existing and not args.allow_regression:
+        lower = lower_metrics(existing, result.metrics)
+        if lower:
+            raise EvalGateError(
+                "refusing to write a baseline that is lower than the existing baseline: "
+                + "; ".join(lower) + ". Pass --allow-regression if that is intended."
+            )
+    write_baseline(args.baseline, result.metrics, k, tolerance,
+                   evalset=(digest, len(questions)),
+                   tolerances=existing.tolerances if existing else None)
+    print(f"wrote {args.baseline}")
+    return 0
 
 
 def _run(args: argparse.Namespace) -> int:
     questions, digest = load_evalset_with_fingerprint(args.evalset)
-    app = load_app(args.app, parse_params(args.param))
-    judge = judge_from_env()
-    if args.command == "baseline":
-        k = 3
-        result = run_evalset(app, questions, k=k, judge=judge)
-        write_baseline(args.baseline, result.metrics, k, evalset=(digest, len(questions)))
-        print(f"wrote {args.baseline}")
-        return 0
-    baseline: Baseline = load_baseline(args.baseline)
     if args.tolerance is not None and (not math.isfinite(args.tolerance) or args.tolerance < 0):
         raise EvalGateError("--tolerance must be a finite number, not negative")
+    app = load_app(args.app, parse_params(args.param))
+    if args.command == "baseline":
+        return _write_baseline(args, app, questions, digest)
+    judge = judge_from_env()
+    baseline: Baseline = load_baseline(args.baseline)
     check_evalset(baseline, digest, len(questions))
     result = run_evalset(app, questions, k=baseline.k, judge=judge)
     rows = compare(baseline, result.metrics, args.tolerance)
