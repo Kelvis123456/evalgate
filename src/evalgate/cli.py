@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -47,8 +48,8 @@ def _run(args: argparse.Namespace) -> int:
         print(f"wrote {args.baseline}")
         return 0
     baseline: Baseline = load_baseline(args.baseline)
-    if args.tolerance is not None and args.tolerance < 0:
-        raise EvalGateError("--tolerance must not be negative")
+    if args.tolerance is not None and (not math.isfinite(args.tolerance) or args.tolerance < 0):
+        raise EvalGateError("--tolerance must be a finite number, not negative")
     result = run_evalset(app, questions, k=baseline.k, judge=judge)
     rows = compare(baseline, result.metrics, args.tolerance)
     report = render_markdown(rows)

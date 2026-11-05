@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,12 +34,18 @@ class Row:
 def _num(value: object, what: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise EvalGateError(f"baseline: {what} must be a number")
+    if not math.isfinite(value):
+        raise EvalGateError(f"baseline: {what} must be finite, got {value}")
     return float(value)
+
+
+def _reject_constant(name: str):
+    raise EvalGateError(f"baseline: {name} is not allowed, numbers must be finite")
 
 
 def parse_baseline(text: str, source: str = "<string>") -> Baseline:
     try:
-        raw = json.loads(text)
+        raw = json.loads(text, parse_constant=_reject_constant)
     except json.JSONDecodeError as exc:
         raise EvalGateError(f"{source}: invalid JSON ({exc.msg} at line {exc.lineno})") from exc
     if not isinstance(raw, dict) or not isinstance(raw.get("metrics"), dict) or not raw["metrics"]:
@@ -90,6 +97,8 @@ def compare(baseline: Baseline, current: dict[str, float | None],
         if cur is None:
             rows.append(Row(name, base, None, None, tol, False))
             continue
+        if not math.isfinite(cur):
+            raise EvalGateError(f"metric '{name}' is {cur}, metrics must be finite")
         delta = round(cur - base, 6)
         rows.append(Row(name, base, cur, delta, tol, round(-delta, 6) <= tol))
     return rows
