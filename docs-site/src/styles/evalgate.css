@@ -1,0 +1,214 @@
+/* Fonts are self-hosted through fontsource, latin subset only. */
+@import "@fontsource-variable/fraunces/wght.css";
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-400-italic.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+
+/*
+ * Identity: a measuring instrument, not a brochure. Graphite surfaces, one
+ * verdigris signal colour, Fraunces only for headings, Plex for everything
+ * you read or type. The recurring mark is a baseline tick inside a tolerance
+ * band (see h1#_top::after), because that is what the tool actually checks.
+ *
+ * Contrast of every text/background pair below is computed in
+ * scripts/contrast.mjs and checked in CI by `npm run check-contrast`.
+ */
+
+/* Dark is Starlight's default theme, so it lives on bare :root. */
+:root {
+  --sl-font:
+    "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --sl-font-mono:
+    "IBM Plex Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --eg-heading: "Fraunces Variable", Georgia, "Times New Roman", serif;
+
+  --sl-color-black: #0f1316;
+  --sl-color-gray-7: #151a1e;
+  --sl-color-gray-6: #1d2429;
+  --sl-color-gray-5: #343e44;
+  --sl-color-gray-4: #5b676d;
+  --sl-color-gray-3: #8e9ba2;
+  --sl-color-gray-2: #bcc6cb;
+  --sl-color-gray-1: #dfe5e7;
+  --sl-color-white: #f2f5f6;
+
+  --sl-color-accent-low: #0e3532;
+  --sl-color-accent: #2c9d8f;
+  --sl-color-accent-high: #74d6c7;
+
+  --sl-color-bg-nav: var(--sl-color-gray-7);
+  --sl-color-bg-sidebar: var(--sl-color-gray-7);
+  --sl-color-hairline-light: var(--sl-color-gray-5);
+  --sl-color-hairline: var(--sl-color-gray-6);
+
+  --eg-pass: #74d6c7;
+  --eg-pass-bg: #0e3532;
+  --eg-fail: #ff9f8f;
+  --eg-fail-bg: #3b1d19;
+
+  --sl-content-width: 46rem;
+  --sl-text-body: 1.0625rem;
+  --sl-line-height: 1.65;
+}
+
+:root[data-theme="light"] {
+  --sl-color-black: #f7f8f6;
+  --sl-color-gray-7: #eceeeb;
+  --sl-color-gray-6: #e1e5e2;
+  --sl-color-gray-5: #c3cbc7;
+  --sl-color-gray-4: #697379;
+  --sl-color-gray-3: #4e595f;
+  --sl-color-gray-2: #343e44;
+  --sl-color-gray-1: #1d2428;
+  --sl-color-white: #12171a;
+
+  --sl-color-accent-low: #cfeae6;
+  --sl-color-accent: #0a6a62;
+  --sl-color-accent-high: #07514b;
+
+  --sl-color-bg-nav: #fdfdfc;
+  --sl-color-bg-sidebar: #f1f3f0;
+
+  --eg-pass: #07514b;
+  --eg-pass-bg: #cfeae6;
+  --eg-fail: #8a2316;
+  --eg-fail-bg: #fbe0da;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Headings ---------------------------------------------------------- */
+.sl-markdown-content :is(h1, h2, h3, h4),
+h1#_top,
+.hero h1 {
+  font-family: var(--eg-heading);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+}
+
+h1#_top {
+  font-size: clamp(2rem, 1.5rem + 2vw, 2.75rem);
+  line-height: 1.1;
+  position: relative;
+  padding-bottom: 1.25rem;
+}
+
+.sl-markdown-content h2 {
+  font-size: 1.625rem;
+  margin-top: 2.5rem;
+}
+
+.sl-markdown-content :is(h3, h4) {
+  font-size: 1.25rem;
+}
+
+.sl-markdown-content p,
+.sl-markdown-content li {
+  text-wrap: pretty;
+}
+
+/* Baseline tick inside a tolerance band: the page title's underline. */
+h1#_top::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  bottom: 0;
+  width: 9rem;
+  height: 0.75rem;
+  background:
+    linear-gradient(var(--sl-color-accent), var(--sl-color-accent)) 7.25rem 0 /
+      2px 100% no-repeat,
+    linear-gradient(var(--sl-color-accent-low), var(--sl-color-accent-low))
+      6.5rem 0 / 1.5rem 100% no-repeat,
+    linear-gradient(var(--sl-color-gray-5), var(--sl-color-gray-5)) 0 50% / 100%
+      1px no-repeat;
+}
+
+/* ---- Links and inline code --------------------------------------------- */
+.sl-markdown-content a:not(.sl-link-button) {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.sl-markdown-content :not(pre) > code {
+  font-size: 0.875em;
+  border: 1px solid var(--sl-color-hairline-light);
+  border-radius: 0.25rem;
+  padding: 0.075em 0.3em;
+}
+
+.sl-markdown-content :is(h2, h3, h4) code {
+  font-size: 0.78em;
+  font-weight: 400;
+  vertical-align: 0.1em;
+}
+
+/* ---- Tables ------------------------------------------------------------ */
+.sl-markdown-content table {
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sl-markdown-content th {
+  font-weight: 600;
+  color: var(--sl-color-white);
+}
+
+/* PASS / FAIL cells get a text label plus colour, never colour alone. */
+.eg-status {
+  font-family: var(--sl-font-mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.25rem;
+  white-space: nowrap;
+}
+.eg-status[data-status="PASS"] {
+  color: var(--eg-pass);
+  background: var(--eg-pass-bg);
+}
+.eg-status[data-status="FAIL"] {
+  color: var(--eg-fail);
+  background: var(--eg-fail-bg);
+}
+
+/* ---- Chrome ------------------------------------------------------------ */
+.site-title {
+  font-family: var(--eg-heading);
+  font-weight: 600;
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+}
+
+.sidebar-content a[aria-current="page"] {
+  font-weight: 600;
+}
+
+.sl-link-button {
+  transition-property: background-color, border-color, color;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+/* ---- Home -------------------------------------------------------------- */
+.hero h1 {
+  font-size: clamp(2.5rem, 1.6rem + 4vw, 4.25rem);
+  line-height: 1.04;
+}
+
+.hero .tagline,
+.hero p {
+  max-width: 34rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

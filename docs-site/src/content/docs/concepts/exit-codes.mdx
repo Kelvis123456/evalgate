@@ -1,0 +1,45 @@
+---
+title: Exit codes
+description: What exit codes 0, 1 and 2 mean in evalgate, the exact error messages behind code 2, and the one case where code 1 is not a regression.
+---
+
+A CI log should say which kind of failure happened, so evalgate uses three codes.
+
+| Code | Meaning                                                                            | Output                                                   |
+| ---- | ---------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `0`  | Every baseline metric is within tolerance, or `evalgate baseline` wrote the file.  | Report on stdout (`run`) or `wrote <path>` (`baseline`). |
+| `1`  | Regression: at least one metric dropped by more than its tolerance, or is missing. | Report on stdout.                                        |
+| `2`  | Bad input. Nothing was compared.                                                   | `evalgate: error: <message>` on stderr.                  |
+
+## Exit code 2: bad input
+
+Anything evalgate can recognise as a problem with what you supplied maps to `2`. These messages are real output.
+
+| Problem                      | Message                                                                                                                |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Malformed JSONL line         | `evalgate: error: bad.jsonl:2: invalid JSON (Expecting value)`                                                         |
+| Duplicate id                 | `evalgate: error: dup.jsonl:2: duplicate question id 'q1' (first seen on line 1)`                                      |
+| Eval set unreadable          | `evalgate: error: cannot read eval set missing.jsonl: No such file or directory`                                       |
+| Missing baseline             | `evalgate: error: baseline not found: nope.json. Create one with 'evalgate baseline' and commit it.`                   |
+| App spec without a colon     | `evalgate: error: bad app spec 'shop', expected module:factory`                                                        |
+| Module cannot be imported    | `evalgate: error: cannot import 'shop': No module named 'shop'`                                                        |
+| Malformed `--param`          | `evalgate: error: bad --param 'top_k', expected key=value`                                                             |
+| Factory rejects a parameter  | `evalgate: error: factory 'shop:build' rejected params {'nope': 1}: build() got an unexpected keyword argument 'nope'` |
+| App returned the wrong shape | `evalgate: error: question q1: app result: 'cited_ids' must be a list of strings`                                      |
+| Negative tolerance           | `evalgate: error: --tolerance must not be negative`                                                                    |
+
+A flag argparse itself rejects, such as `--tolerance abc`, prints a usage message and also exits `2`.
+
+## Exit code 1: a regression, or a crash in your app
+
+`1` is what a regression returns, and it is also what Python returns when an exception escapes. evalgate only converts its own input errors to `2`. If your app's `answer()` raises, say a model endpoint times out, the traceback is printed and the exit code is `1`, indistinguishable from a regression by code alone:
+
+```text
+RuntimeError: model endpoint timed out
+```
+
+If you need to tell them apart, catch exceptions inside your app and return an empty `answer`, which counts as an abstention and will show up in the metrics, or look for a Python traceback in the log. This is a known gap, see [Limitations](/limitations/).
+
+## Using the codes in CI
+
+Any CI system treats non-zero as failure, so you rarely need to distinguish `1` from `2` in logic. The distinction is for people reading the log: `2` means fix your setup, `1` means your change made answers worse. See [Run it in GitHub Actions](/guides/github-actions/).

@@ -1,0 +1,41 @@
+---
+title: Limitations
+description: What evalgate does not do and where its numbers can mislead you, stated plainly. Read this before you trust a green build.
+---
+
+evalgate is a regression gate, not an evaluation of whether your app is good. These are the places where that distinction bites.
+
+## The metrics are lexical
+
+- **A correct answer in different words fails `answer_contains_fact`.** The check is a normalized substring match against `gold_fact`. "Thirty seconds" does not match `30 seconds`.
+- **A wrong answer that quotes the gold fact passes.** Containing the string is all it checks.
+- **Substring, not word match.** A gold fact of `30 days` is found inside `130 days`.
+- **Citation correctness checks the id, not the support.** `citation_correct` asks whether the app cited a gold passage id. It does not read the cited text to see whether it supports the answer.
+
+## The statistics are thin
+
+- **Fixed tolerance, no significance test.** The default 0.02 is just a number. With the 41-question reference set, one question moves `hit_at_k` by about 0.03, which is more than the default tolerance. A tolerance only makes sense once you know your set size, see [Baseline and tolerance](/concepts/baseline-and-tolerance/#choosing-a-tolerance).
+- **Nondeterministic apps will flap.** The gate assumes the same input gives the same output. If your app calls a model that varies, widen the tolerance above the variation you measure.
+- **The eval set is not checked for leakage** into the app, for example questions or gold facts copied into a prompt or an index.
+
+## The baseline is a human decision
+
+- **It is only as good as the person who last ran `evalgate baseline`.** Refreshing after a regression hides the regression. The protection is that the change is a visible diff in a committed file, not that the tool stops you.
+- **`evalgate baseline` overwrites hand-edited settings.** It always writes `k` as `3`, `default_tolerance` as `0.02` and an empty `tolerances`. See [Update the baseline](/guides/update-baseline/).
+
+## Reporting
+
+- **No per-question output.** The report shows aggregates. It does not tell you which question regressed, so you have to rerun your app on suspects yourself.
+- **A crash in your app exits `1`.** evalgate converts only its own input errors to exit code `2`. An exception from `answer()` prints a traceback and exits `1`, the same code as a regression. See [Exit codes](/concepts/exit-codes/#exit-code-1-a-regression-or-a-crash-in-your-app).
+
+## Scope
+
+- **Single-turn questions only.** No multi-turn conversations, no tool use, no latency or cost budgets.
+- **The judge is a stub.** `judge_score` is an interface and a word-overlap example, not an LLM. There is no vendor client.
+- **The reference app is a toy.** Its corpus is 25 short passages and its 41 questions are easy for BM25, so `hit_at_k` is 1.0. The numbers show the gate works, not that this is a good RAG system.
+
+## Distribution and testing
+
+- **Not on PyPI.** Install from a checkout with `pip install -e ".[dev]"`.
+- **Tested on Windows with Python 3.14.** The CI workflow targets Python 3.12 but has not run yet, because nothing has been pushed to GitHub. The security workflow has not run either.
+- **The workflows are unverified.** They were written to match locally verified commands. Expect to fix something on the first real run.

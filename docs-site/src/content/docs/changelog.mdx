@@ -1,0 +1,28 @@
+---
+title: Changelog
+description: Release history of evalgate. One release so far, 0.1.0.
+---
+
+## 0.1.0
+
+Released 2026-11-04. First and only version so far. It has not been published to PyPI and the repository has not been pushed to GitHub, so "released" here means tagged in `pyproject.toml` and `evalgate.__version__`.
+
+**Added**
+
+- `evalgate run`: executes an eval set against an app, compares each metric to `baseline.json`, prints a Markdown report and exits `0`, `1` or `2`.
+- `evalgate baseline`: runs the set and writes a new baseline file.
+- Five offline metrics: `hit_at_k`, `mrr`, `citation_correct`, `answer_contains_fact`, `abstention_accuracy`.
+- An optional `judge_score` metric behind `EVALGATE_JUDGE`, with an interface and a word-overlap stub only.
+- The `App` protocol (`answer(question)` returning `answer`, `cited_ids`, `retrieved_ids`), loaded with `--app module:factory` and configured with `--param`.
+- A reference RAG app with a 25-passage corpus, a stdlib BM25 retriever and an extractive answerer, plus a 41-question eval set and a committed baseline.
+- A pytest suite of 87 tests.
+- `ci.yml`, which runs the tests and the gate, and `security.yml`. Neither has run on GitHub.
+- A regression demo with real output for three degraded settings.
+
+**Known gaps in this release**
+
+- `evalgate baseline` resets `k`, `default_tolerance` and `tolerances` to their defaults.
+- An exception inside your app exits `1`, the same as a regression.
+- No per-question output.
+
+See [Limitations](/limitations/) for the full list.

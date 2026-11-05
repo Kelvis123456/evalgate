@@ -1,0 +1,72 @@
+---
+title: Update the baseline
+description: When and how to refresh baseline.json with evalgate baseline, what the command overwrites, and how not to hide a regression.
+---
+
+`evalgate baseline` runs the eval set against the app and writes the resulting scores to a baseline file.
+
+```sh
+evalgate baseline
+```
+
+```text
+wrote baseline.json
+```
+
+It accepts `--evalset`, `--baseline`, `--app` and `--param`, the same as `run`. It does not accept `--tolerance` or `--report-file`. It always exits `0` when the run completes, because there is nothing to compare against.
+
+## When to refresh it
+
+Refresh in the same commit as the change that justifies it:
+
+- You improved the app and want the new scores to be the floor.
+- You changed the eval set, so the old scores no longer describe the same test.
+- You changed the app on purpose in a way that trades one metric for another and a reviewer agreed.
+
+Do not refresh it to make a red build green. The baseline is only as good as the person who last ran this command, and refreshing after a regression erases the regression.
+
+## What gets overwritten
+
+The command writes the whole file from scratch. From the code, this is what it writes:
+
+- `version` is `1`.
+- `k` is **always `3`**. It does not read the old value.
+- `default_tolerance` is **always `0.02`**.
+- `tolerances` is **always `{}`**.
+- `metrics` is every metric the run produced, rounded to 6 places. Metrics with no applicable questions are left out.
+
+Real check: a baseline edited to `"k": 5` and `"tolerances": {"mrr": 0.05}`, then rewritten with `evalgate baseline`, came back with `"k": 3` and `"tolerances": {}`. If you customise either, put them back after refreshing and look at the diff before you commit. If your gate depends on a `k` other than 3 or on per-metric tolerances, this is the sharpest edge in the tool.
+
+If `EVALGATE_JUDGE` is set, `judge_score` is written too. Use the same environment for `baseline` and `run`, see [Metrics](/concepts/metrics/#judge_score).
+
+## Review the diff
+
+The point of committing the baseline is that the change is visible. After refreshing, read it. This is the real diff from rewriting the reference baseline with `--param top_k=1`:
+
+```diff
+--- baseline.json
++++ bl.json
+@@ -4,8 +4,8 @@
+   "default_tolerance": 0.02,
+   "tolerances": {},
+   "metrics": {
+-    "hit_at_k": 1.0,
+-    "mrr": 0.985294,
++    "hit_at_k": 0.970588,
++    "mrr": 0.970588,
+     "citation_correct": 0.941176,
+     "answer_contains_fact": 0.882353,
+     "abstention_accuracy": 0.714286
+```
+
+Both numbers went down. A reviewer who sees that in a pull request knows the bar was lowered and can ask why. That is the whole design: the gate cannot be weakened without a visible change to a committed file.
+
+Improvements are never gated, so they only show up here, when someone chooses to refresh.
+
+## A workflow that holds up
+
+1. Make the change to your app.
+2. `evalgate run`. If it fails, decide whether the drop is a bug or an accepted tradeoff.
+3. If it is a bug, fix the app. Do not touch the baseline.
+4. If it is an accepted tradeoff, run `evalgate baseline`, review the diff, and write the reason in the commit message.
+5. Restore any custom `k` or `tolerances` that the command reset.
