@@ -23,6 +23,12 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _contains_fact(fact: str, answer: str) -> bool:
+    """Whole-token match: '7 days' must not hit '17 days' or '1.7 days', '429' not '4290'."""
+    pattern = r"(?<!\w)(?<!\d[.,])" + re.escape(_norm(fact)) + r"(?!\w)(?![.,]\d)"
+    return re.search(pattern, _norm(answer)) is not None
+
+
 @dataclass(frozen=True)
 class QuestionScore:
     id: str
@@ -44,7 +50,7 @@ def score_question(q: Question, r: Result, k: int) -> QuestionScore:
             rr = 1 / rank
             break
     cited = 1.0 if not r.abstained and any(i in gold for i in r.cited_ids) else 0.0
-    fact = 1.0 if q.gold_fact and _norm(q.gold_fact) in _norm(r.answer) else 0.0
+    fact = 1.0 if q.gold_fact and _contains_fact(q.gold_fact, r.answer) else 0.0
     return QuestionScore(q.id, hit, rr, cited, fact, None)
 
 
