@@ -124,8 +124,8 @@ not an LLM. There is no vendor client in this repo.
 
 CI is in `.github/workflows/ci.yml`: pytest, then the gate, with the report
 written to the job summary. `security.yml` comes from my usual security kit
-(gitleaks, semgrep, zizmor, bandit, osv). I could not run either workflow here
-because nothing has been pushed yet.
+(gitleaks, semgrep, zizmor, bandit, osv). Both run on every push and pull
+request.
 
 ## Limitations
 
