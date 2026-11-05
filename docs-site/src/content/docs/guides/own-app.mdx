@@ -1,0 +1,132 @@
+---
+title: Plug in your own app
+description: The App protocol is one method returning three keys. Write a factory, point --app at it, and pass settings with --param. Includes a complete runnable example.
+---
+
+evalgate does not care how your app works. It needs a **factory**: a callable that returns an object with an `answer(question)` method.
+
+## The protocol
+
+```python
+class App(Protocol):
+    def answer(self, question: str) -> dict[str, Any]: ...
+```
+
+`answer` must return a dict with these keys:
+
+| Key             | Type            | Meaning                                                                           |
+| --------------- | --------------- | --------------------------------------------------------------------------------- |
+| `answer`        | `str`, required | The final text. An **empty string means the app abstained**.                      |
+| `cited_ids`     | `list[str]`     | Passage ids the answer claims to rely on. Defaults to `[]` if the key is missing. |
+| `retrieved_ids` | `list[str]`     | Passage ids from retrieval, best first. Defaults to `[]` if the key is missing.   |
+
+Anything else raises an error and exits with code `2`: a non-dict result, a non-string `answer`, or an id list that is not a list of strings. The message names the question, for example `question q1: app result: 'cited_ids' must be a list of strings`.
+
+The ids must be the same ids you use in `gold_ids` in the [eval set](/concepts/eval-set/). If your app has no notion of passages, return empty lists. Then `hit_at_k`, `mrr` and `citation_correct` will be 0 and you should not keep them in the baseline. See [Limitations](/limitations/).
+
+Abstention is an empty answer rather than a flag so the protocol stays at three keys and a refusal phrase never has to be matched against free text. See [Decisions](/decisions/).
+
+## The factory and `--param`
+
+```sh
+evalgate run --app mypackage.mymodule:build --param top_k=5
+```
+
+`--app` is `module:factory`, where `module` is anything `importlib` can import. evalgate calls `factory(**params)` once per run. Each `--param KEY=VALUE` becomes a keyword argument, and the value is converted: an integer if it parses as one, else a float, else `true`/`false` become booleans, else it stays a string. `--param` may be repeated. With no `--app`, evalgate uses `evalgate.refapp:build`.
+
+If the factory does not accept a parameter, or returns an object without a callable `answer`, evalgate exits with code `2`.
+
+## A runnable example
+
+A small keyword app, `shop.py`. It is a stand-in to show the contract, not a good retriever.
+
+```python title="shop.py"
+DOCS = {
+    "d1": "Standard shipping takes 3 to 5 business days.",
+    "d2": "Returns are accepted within 30 days of delivery.",
+    "d3": "Gift cards never expire.",
+}
+
+
+STOPWORDS = {"a", "an", "do", "does", "i", "how", "of", "to", "you", "are", "the", "have"}
+
+
+class ShopApp:
+    def __init__(self, top_k: int = 2):
+        self.top_k = top_k
+
+    def answer(self, question: str) -> dict:
+        words = set(question.casefold().replace("?", "").split()) - STOPWORDS
+        scored = sorted(
+            (
+                (len(words & set(text.casefold().rstrip(".").split())), doc_id)
+                for doc_id, text in DOCS.items()
+            ),
+            reverse=True,
+        )
+        retrieved = [doc_id for score, doc_id in scored[: self.top_k] if score > 0]
+        if not retrieved:
+            return {"answer": "", "cited_ids": [], "retrieved_ids": []}
+        best = retrieved[0]
+        return {"answer": DOCS[best], "cited_ids": [best], "retrieved_ids": retrieved}
+
+
+def build(top_k: int = 2) -> ShopApp:
+    return ShopApp(top_k=top_k)
+```
+
+And its eval set, `questions.jsonl`, with one unanswerable question:
+
+```text title="questions.jsonl"
+{"id": "q1", "question": "How long does standard shipping take?", "gold_ids": ["d1"], "gold_fact": "3 to 5 business days"}
+{"id": "q2", "question": "How many days do I have to return an item?", "gold_ids": ["d2"], "gold_fact": "30 days"}
+{"id": "q3", "question": "Do gift cards expire?", "gold_ids": ["d3"], "gold_fact": "never expire"}
+{"id": "u1", "question": "Do you ship to Mars?", "answerable": false}
+```
+
+Create the baseline, then run the gate. This is real output:
+
+```sh
+python -m evalgate baseline --app shop:build --evalset questions.jsonl --baseline shop-baseline.json
+```
+
+```text
+wrote shop-baseline.json
+```
+
+```sh
+python -m evalgate run --app shop:build --evalset questions.jsonl --baseline shop-baseline.json
+```
+
+```text
+## evalgate: PASS
+
+| Metric | Baseline | Current | Delta | Tolerance | Status |
+| --- | ---: | ---: | ---: | ---: | :---: |
+| hit_at_k | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |
+| mrr | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |
+| citation_correct | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |
+| answer_contains_fact | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |
+| abstention_accuracy | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |
+
+No metric dropped more than its tolerance below the baseline.
+```
+
+Four questions is far too few for a real gate. It is here to show the contract end to end.
+
+:::caution[Make your module importable]
+Run as `python -m evalgate`, the current directory is on the import path, which is why the commands above work from the folder containing `shop.py`. The `evalgate` console script does not add it. Run from the same folder, the console script fails like this:
+
+```text
+evalgate: error: cannot import 'shop': No module named 'shop'
+```
+
+Either use `python -m evalgate`, set `PYTHONPATH=.`, or install your app as a package (`pip install -e .`) so it imports from anywhere. In CI, installing the package is the usual answer. The `PYTHONPATH=. evalgate run ...` form was checked and works.
+:::
+
+## Things worth knowing
+
+- The app is built once and `answer` is called once per question, in file order. Build your index in the factory, not in `answer`.
+- evalgate does no retries and has no timeout. A slow app makes a slow gate.
+- If `answer` raises, the traceback is printed and the exit code is `1`. See [Exit codes](/concepts/exit-codes/#exit-code-1-a-regression-or-a-crash-in-your-app).
+- Keep the app deterministic for the gate. If it calls a model, scores will move between runs and you will have to widen the tolerance. See [Baseline and tolerance](/concepts/baseline-and-tolerance/#choosing-a-tolerance).

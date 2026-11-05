@@ -1,0 +1,59 @@
+---
+title: Read a failing report
+description: How to read the evalgate Markdown table column by column, and a worked example of diagnosing a failure from the pattern of which metrics dropped.
+---
+
+Every run prints the same Markdown report. This page walks through a real failing one.
+
+```text
+## evalgate: FAIL
+
+| Metric | Baseline | Current | Delta | Tolerance | Status |
+| --- | ---: | ---: | ---: | ---: | :---: |
+| hit_at_k | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |
+| mrr | 0.9853 | 0.9853 | +0.0000 | 0.0200 | PASS |
+| citation_correct | 0.9412 | 0.3529 | -0.5882 | 0.0200 | FAIL |
+| answer_contains_fact | 0.8824 | 0.3529 | -0.5294 | 0.0200 | FAIL |
+| abstention_accuracy | 0.7143 | 1.0000 | +0.2857 | 0.0200 | PASS |
+
+Regressed beyond tolerance: citation_correct, answer_contains_fact.
+```
+
+This came from `evalgate run --param min_coverage=0.9`.
+
+## The columns
+
+| Column    | Meaning                                                                                                                                                         |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Metric    | A metric listed in `baseline.json`. One row per baseline metric, in the file's order.                                                                           |
+| Baseline  | The committed score, shown to 4 decimals.                                                                                                                       |
+| Current   | This run's score, or `missing` if the run did not produce it.                                                                                                   |
+| Delta     | `current - baseline`, signed, rounded to 6 places then shown to 4. `n/a` when missing.                                                                          |
+| Tolerance | The tolerance applied to this row. All rows show the same number unless the baseline has per-metric tolerances. With `--tolerance`, all rows show the override. |
+| Status    | `FAIL` when the drop is strictly larger than the tolerance, or the metric is missing.                                                                           |
+
+The heading is `PASS` only if every row passes. The last line is either "No metric dropped more than its tolerance below the baseline." or `Regressed beyond tolerance:` followed by the failing metric names. A reduced display precision does not change the verdict. A delta that prints as `-0.0200` can pass or fail depending on the six-place value underneath.
+
+## Diagnose by pattern
+
+Do not look at one number. The pattern of which metrics moved tells you which stage broke.
+
+| Pattern                                                                      | Likely cause                                                                                                             |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `hit_at_k` and `mrr` drop                                                    | Retrieval got worse: tokenizer, index, embedding model, chunking, `top_k`.                                               |
+| `hit_at_k` and `mrr` fine, `citation_correct` or `answer_contains_fact` drop | Retrieval still finds the passage but the answering step lost it: prompt, model, answer selection, abstention threshold. |
+| `abstention_accuracy` rises while others fall                                | The app is refusing more. An app that finds nothing refuses everything, which looks good on that one metric.             |
+| Only `mrr` drops, a little                                                   | The right passage moved down the ranking but is still in the top `k`.                                                    |
+| `citation_correct` and `answer_contains_fact` move together                  | Usually the answerer abstained or picked the wrong sentence. Both need a non-empty, relevant answer.                     |
+
+Applied to the report above: `hit_at_k` and `mrr` did not move, so retrieval is fine. `citation_correct` and `answer_contains_fact` collapsed together while `abstention_accuracy` went to 1.0000. The answerer is refusing questions it used to answer. In the reference app that is a coverage threshold set too high, which is exactly what `min_coverage=0.9` did.
+
+## Not every FAIL is a bug
+
+- A small `FAIL` on a small set can be a single question. Check the set size. One question out of 34 is `0.0294`, past the 0.02 default.
+- `mrr` can move within tolerance and pass while a bigger metric fails, as in the [`top_k=1` run](/reference/demo/#3-smaller-top_k-top_k1).
+- If you made a deliberate tradeoff, [update the baseline](/guides/update-baseline/) in the same commit and say why.
+
+## Finding the question behind a number
+
+The report is an aggregate. evalgate does not print per-question results, so it will not tell you which question failed. To find out, run your app on the suspect questions directly and compare the returned `retrieved_ids`, `cited_ids` and `answer` to the gold fields. This is a limitation, see [Limitations](/limitations/).
