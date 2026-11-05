@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,27 +19,36 @@ class Baseline:
     default_tolerance: float
     tolerances: dict[str, float]
     k: int
+    evalset_sha256: str | None = None
+    questions: int | None = None
 
 
 @dataclass(frozen=True)
 class Row:
     metric: str
-    baseline: float
+    baseline: float | None
     current: float | None
     delta: float | None
-    tolerance: float
+    tolerance: float | None
     passed: bool
+    new: bool = False  # produced by the run but absent from the baseline, so not gated
 
 
 def _num(value: object, what: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise EvalGateError(f"baseline: {what} must be a number")
+    if not math.isfinite(value):
+        raise EvalGateError(f"baseline: {what} must be finite, got {value}")
     return float(value)
+
+
+def _reject_constant(name: str):
+    raise EvalGateError(f"baseline: {name} is not allowed, numbers must be finite")
 
 
 def parse_baseline(text: str, source: str = "<string>") -> Baseline:
     try:
-        raw = json.loads(text)
+        raw = json.loads(text, parse_constant=_reject_constant)
     except json.JSONDecodeError as exc:
         raise EvalGateError(f"{source}: invalid JSON ({exc.msg} at line {exc.lineno})") from exc
     if not isinstance(raw, dict) or not isinstance(raw.get("metrics"), dict) or not raw["metrics"]:
@@ -53,7 +63,14 @@ def parse_baseline(text: str, source: str = "<string>") -> Baseline:
         raise EvalGateError(f"{source}: 'k' must be a positive integer")
     if default < 0 or any(t < 0 for t in tolerances.values()):
         raise EvalGateError(f"{source}: tolerances must not be negative")
-    return Baseline(metrics, default, tolerances, k)
+    ev = raw.get("evalset")
+    sha, count = None, None
+    if ev is not None:
+        if (not isinstance(ev, dict) or not isinstance(ev.get("sha256"), str)
+                or isinstance(ev.get("questions"), bool) or not isinstance(ev.get("questions"), int)):
+            raise EvalGateError(f"{source}: 'evalset' must be {{\"sha256\": str, \"questions\": int}}")
+        sha, count = ev["sha256"], ev["questions"]
+    return Baseline(metrics, default, tolerances, k, sha, count)
 
 
 def load_baseline(path: str | Path) -> Baseline:
@@ -62,15 +79,51 @@ def load_baseline(path: str | Path) -> Baseline:
         raise EvalGateError(
             f"baseline not found: {p}. Create one with 'evalgate baseline' and commit it."
         )
-    return parse_baseline(p.read_text(encoding="utf-8"), str(p))
+    try:
+        text = p.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise EvalGateError(f"cannot read baseline {p}: {exc}") from exc
+    return parse_baseline(text, str(p))
 
 
 def write_baseline(path: str | Path, metrics: dict[str, float | None], k: int,
-                   default_tolerance: float = DEFAULT_TOLERANCE) -> None:
+                   default_tolerance: float = DEFAULT_TOLERANCE,
+                   evalset: tuple[str, int] | None = None,
+                   tolerances: dict[str, float] | None = None) -> None:
     clean = {n: v for n, v in metrics.items() if v is not None}
-    payload = {"version": BASELINE_VERSION, "k": k, "default_tolerance": default_tolerance,
-               "tolerances": {}, "metrics": clean}
-    Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    payload: dict = {"version": BASELINE_VERSION, "k": k, "default_tolerance": default_tolerance,
+                     "tolerances": tolerances or {}}
+    if evalset is not None:
+        payload["evalset"] = {"sha256": evalset[0], "questions": evalset[1]}
+    payload["metrics"] = clean
+    try:
+        Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        raise EvalGateError(f"cannot write baseline {path}: {exc.strerror or exc}") from exc
+
+
+def lower_metrics(old: Baseline, new: dict[str, float | None]) -> list[str]:
+    """Describe every metric in `old` that `new` lowers or no longer produces."""
+    out = []
+    for name, was in old.metrics.items():
+        now = new.get(name)
+        if now is None:
+            out.append(f"{name} {was:.4f} -> missing")
+        elif now < was:
+            out.append(f"{name} {was:.4f} -> {now:.4f}")
+    return out
+
+
+def check_evalset(baseline: Baseline, sha256: str, questions: int) -> None:
+    """The baseline only means something for the eval set it was measured on."""
+    if baseline.evalset_sha256 is None:
+        raise EvalGateError("baseline does not record its eval set; re-run 'evalgate baseline' and commit it")
+    if baseline.evalset_sha256 != sha256:
+        raise EvalGateError(
+            f"eval set changed since the baseline was written (baseline: {baseline.evalset_sha256[:12]}, "
+            f"{baseline.questions} questions; now: {sha256[:12]}, {questions} questions). "
+            "Review the change, then run 'evalgate baseline' and commit the result."
+        )
 
 
 def compare(baseline: Baseline, current: dict[str, float | None],
@@ -90,8 +143,15 @@ def compare(baseline: Baseline, current: dict[str, float | None],
         if cur is None:
             rows.append(Row(name, base, None, None, tol, False))
             continue
+        if not math.isfinite(cur):
+            raise EvalGateError(f"metric '{name}' is {cur}, metrics must be finite")
         delta = round(cur - base, 6)
         rows.append(Row(name, base, cur, delta, tol, round(-delta, 6) <= tol))
+    for name, cur in current.items():
+        if name not in baseline.metrics and cur is not None:
+            if not math.isfinite(cur):
+                raise EvalGateError(f"metric '{name}' is {cur}, metrics must be finite")
+            rows.append(Row(name, None, cur, None, None, True, new=True))
     return rows
 
 
@@ -111,10 +171,10 @@ def render_markdown(rows: list[Row]) -> str:
     for r in rows:
         cur = "missing" if r.current is None else f"{r.current:.4f}"
         delta = "n/a" if r.delta is None else f"{r.delta:+.4f}"
-        lines.append(
-            f"| {r.metric} | {r.baseline:.4f} | {cur} | {delta} | {r.tolerance:.4f} | "
-            f"{'PASS' if r.passed else 'FAIL'} |"
-        )
+        base = "n/a" if r.baseline is None else f"{r.baseline:.4f}"
+        tol = "n/a" if r.tolerance is None else f"{r.tolerance:.4f}"
+        status = "new (not gated)" if r.new else ("PASS" if r.passed else "FAIL")
+        lines.append(f"| {r.metric} | {base} | {cur} | {delta} | {tol} | {status} |")
     lines.append("")
     if ok:
         lines.append("No metric dropped more than its tolerance below the baseline.")

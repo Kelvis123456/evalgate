@@ -3,10 +3,15 @@
   "k": 3,
   "default_tolerance": 0.02,
   "tolerances": {},
+  "evalset": {
+    "sha256": "5245ea1577dba951dfe3be5954ad81b836ac9dac3ed2224f4980d1b63eae6f4d",
+    "questions": 41
+  },
   "metrics": {
     "hit_at_k": 1.0,
     "mrr": 0.985294,
     "citation_correct": 0.941176,
+    "citation_precision": 0.902439,
     "answer_contains_fact": 0.882353,
     "abstention_accuracy": 0.714286
   }

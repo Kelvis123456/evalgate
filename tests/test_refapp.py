@@ -1,5 +1,6 @@
 import pytest
 
+from evalgate.cli import main
 from evalgate.errors import EvalGateError
 from evalgate.evalset import load_evalset
 from evalgate.refapp import RefApp, build, load_corpus
@@ -90,6 +91,7 @@ def test_reference_scores_are_pinned():
         "hit_at_k": 1.0,
         "mrr": 0.985294,
         "citation_correct": 0.941176,
+        "citation_precision": 0.902439,
         "answer_contains_fact": 0.882353,
         "abstention_accuracy": 0.714286,
     }
@@ -101,3 +103,35 @@ def test_whitespace_tokenizer_really_is_worse():
     assert m["mrr"] == 0.872549
     assert m["citation_correct"] == 0.5
     assert m["answer_contains_fact"] == 0.5
+
+
+class CorpusDump:
+    """Wraps the reference app but answers with every passage and cites them all."""
+
+    def __init__(self):
+        self.inner = build()
+        self.passages = load_corpus()
+
+    def answer(self, question):
+        out = self.inner.answer(question)
+        return {
+            "answer": " ".join(p.text for p in self.passages),
+            "cited_ids": [p.id for p in self.passages],
+            "retrieved_ids": out["retrieved_ids"],
+        }
+
+
+def test_corpus_dump_app_fails_the_shipped_gate(capsys):
+    import sys
+    import types
+
+    mod = types.ModuleType("dumpapp")
+    mod.build = CorpusDump
+    sys.modules["dumpapp"] = mod
+    try:
+        assert main(["run", "--app", "dumpapp:build"]) == 1
+    finally:
+        del sys.modules["dumpapp"]
+    out = capsys.readouterr().out
+    assert "| citation_precision |" in out and "| answer_contains_fact |" in out
+    assert out.count("FAIL") >= 3

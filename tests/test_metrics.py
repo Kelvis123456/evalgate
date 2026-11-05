@@ -87,6 +87,7 @@ def test_aggregate_exact_numbers_and_none_when_not_applicable():
         "hit_at_k": round(2 / 3, 6),
         "mrr": 0.5,
         "citation_correct": round(1 / 3, 6),
+        "citation_precision": round(1 / 6, 6),
         "answer_contains_fact": round(1 / 3, 6),
         "abstention_accuracy": round(1 / 3, 6),
     }

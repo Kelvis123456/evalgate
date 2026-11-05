@@ -65,9 +65,9 @@ def test_missing_or_none_current_metric_fails():
         assert not rows["mrr"].passed and rows["mrr"].current is None and rows["mrr"].delta is None
 
 
-def test_extra_current_metrics_are_ignored():
+def test_extra_current_metrics_are_reported_but_never_fail_the_gate():
     rows = compare(BASE, {"hit_at_k": 0.9, "mrr": 0.8, "judge_score": 0.1})
-    assert len(rows) == 2 and passed(rows)
+    assert len(rows) == 3 and passed(rows) and rows[-1].new
 
 
 def test_markdown_pass_and_fail():

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+import inspect
+import math
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -53,11 +55,14 @@ def normalize_result(raw: object) -> Result:
 def _coerce(value: str) -> Any:
     for cast in (int, float):
         try:
-            return cast(value)
+            number = cast(value)
         except ValueError:
-            pass
-    if value in ("true", "false"):
-        return value == "true"
+            continue
+        if not math.isfinite(number):
+            raise EvalGateError(f"bad --param value '{value}': numbers must be finite")
+        return number
+    if value.lower() in ("true", "false"):
+        return value.lower() == "true"
     return value
 
 
@@ -80,8 +85,8 @@ def load_factory(spec: str):
         # Importing a module named by the user on their own command line is the plugin mechanism.
         # nosemgrep: python.lang.security.audit.non-literal-import.non-literal-import
         module = importlib.import_module(module_name)
-    except ImportError as exc:
-        raise EvalGateError(f"cannot import '{module_name}': {exc}") from exc
+    except Exception as exc:  # ImportError, SyntaxError, or anything the module raises on import
+        raise EvalGateError(f"cannot import '{module_name}': {type(exc).__name__}: {exc}") from exc
     try:
         return getattr(module, attr)
     except AttributeError as exc:
@@ -92,9 +97,17 @@ def load_app(spec: str, params: dict[str, Any] | None = None) -> App:
     """Build the app by calling the factory with the --param values as kwargs."""
     factory = load_factory(spec)
     try:
-        app = factory(**(params or {}))
+        inspect.signature(factory).bind(**(params or {}))
     except TypeError as exc:
         raise EvalGateError(f"factory '{spec}' rejected params {params}: {exc}") from exc
+    except ValueError:
+        pass  # signature not introspectable (some builtins); let the call decide
+    try:
+        app = factory(**(params or {}))
+    except EvalGateError:
+        raise
+    except Exception as exc:
+        raise EvalGateError(f"factory '{spec}' raised {type(exc).__name__}: {exc}") from exc
     if not callable(getattr(app, "answer", None)):
         raise EvalGateError(f"factory '{spec}' did not return an object with answer()")
     return app

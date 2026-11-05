@@ -41,7 +41,12 @@ def judge_from_env(env: dict[str, str] | None = None) -> Judge | None:
     spec = (env if env is not None else os.environ).get(ENV_VAR, "").strip()
     if not spec:
         return None
-    judge = load_factory(spec)()
+    try:
+        judge = load_factory(spec)()
+    except EvalGateError:
+        raise
+    except Exception as exc:
+        raise EvalGateError(f"{ENV_VAR}='{spec}' raised {type(exc).__name__}: {exc}") from exc
     if not callable(getattr(judge, "score", None)):
         raise EvalGateError(f"{ENV_VAR}='{spec}' did not return an object with score()")
     return judge

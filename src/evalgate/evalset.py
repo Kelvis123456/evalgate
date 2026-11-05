@@ -9,6 +9,7 @@ no gold_fact. The app is expected to abstain on those.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,10 +70,22 @@ def parse_evalset(text: str, source: str = "<string>") -> list[Question]:
     return questions
 
 
-def load_evalset(path: str | Path) -> list[Question]:
+def fingerprint(text: str) -> str:
+    """sha256 of the eval set with line endings, outer spaces and blank lines normalized."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+
+
+def load_evalset_with_fingerprint(path: str | Path) -> tuple[list[Question], str]:
     p = Path(path)
     try:
         text = p.read_text(encoding="utf-8")
     except OSError as exc:
         raise EvalGateError(f"cannot read eval set {p}: {exc.strerror or exc}") from exc
-    return parse_evalset(text, str(p))
+    except UnicodeDecodeError as exc:
+        raise EvalGateError(f"cannot read eval set {p}: not valid UTF-8 ({exc.reason} at byte {exc.start})") from exc
+    return parse_evalset(text, str(p)), fingerprint(text)
+
+
+def load_evalset(path: str | Path) -> list[Question]:
+    return load_evalset_with_fingerprint(path)[0]
