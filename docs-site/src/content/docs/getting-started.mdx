@@ -1,0 +1,92 @@
+---
+title: Getting started
+description: Install evalgate, run the gate against the bundled reference app, then break the app on purpose and watch the build fail.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+You need Python 3.12 or newer. evalgate has no runtime dependencies. The only dev dependency is pytest.
+
+<Steps>
+
+1. **Install from a checkout.**
+
+   evalgate is not published to PyPI. Install it from the repository root:
+
+   ```sh
+   pip install -e ".[dev]"
+   ```
+
+   This puts an `evalgate` command on your path. Check it:
+
+   ```sh
+   evalgate --version
+   ```
+
+   ```text
+   evalgate 0.1.0
+   ```
+
+2. **Run the gate.**
+
+   The repository ships a reference app, an eval set of 41 questions and a committed `baseline.json`. With no flags, `evalgate run` uses all three:
+
+   ```sh
+   evalgate run
+   ```
+
+   ```text
+   ## evalgate: PASS
+
+   | Metric | Baseline | Current | Delta | Tolerance | Status |
+   | --- | ---: | ---: | ---: | ---: | :---: |
+   | hit_at_k | 1.0000 | 1.0000 | +0.0000 | 0.0200 | PASS |
+   | mrr | 0.9853 | 0.9853 | +0.0000 | 0.0200 | PASS |
+   | citation_correct | 0.9412 | 0.9412 | +0.0000 | 0.0200 | PASS |
+   | answer_contains_fact | 0.8824 | 0.8824 | +0.0000 | 0.0200 | PASS |
+   | abstention_accuracy | 0.7143 | 0.7143 | +0.0000 | 0.0200 | PASS |
+
+   No metric dropped more than its tolerance below the baseline.
+   ```
+
+   The exit code is `0`. The paths `evals/questions.jsonl` and `baseline.json` are resolved from the current directory, so run it from the repository root.
+
+3. **Break the app and watch it fail.**
+
+   `--param` passes keyword arguments to the app factory. The reference app accepts `top_k`, `min_coverage`, `k1`, `b` and `tokenizer`, so you can degrade it without editing code:
+
+   ```sh
+   evalgate run --param top_k=1
+   ```
+
+   ```text
+   ## evalgate: FAIL
+
+   | Metric | Baseline | Current | Delta | Tolerance | Status |
+   | --- | ---: | ---: | ---: | ---: | :---: |
+   | hit_at_k | 1.0000 | 0.9706 | -0.0294 | 0.0200 | FAIL |
+   | mrr | 0.9853 | 0.9706 | -0.0147 | 0.0200 | PASS |
+   | citation_correct | 0.9412 | 0.9412 | +0.0000 | 0.0200 | PASS |
+   | answer_contains_fact | 0.8824 | 0.8824 | +0.0000 | 0.0200 | PASS |
+   | abstention_accuracy | 0.7143 | 0.7143 | +0.0000 | 0.0200 | PASS |
+
+   Regressed beyond tolerance: hit_at_k.
+   ```
+
+   The exit code is `1`. One question out of 34 lost its gold passage, and the 0.02 tolerance caught it.
+
+</Steps>
+
+## What you just used
+
+| Piece    | Where                   | What it is                                                                                                       |
+| -------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Eval set | `evals/questions.jsonl` | One JSON object per line. See [Eval set format](/concepts/eval-set/).                                            |
+| Baseline | `baseline.json`         | Scores from a known-good run, committed to git. See [Baseline and tolerance](/concepts/baseline-and-tolerance/). |
+| App      | `evalgate.refapp:build` | A factory returning an object with `answer(question)`. See [Plug in your own app](/guides/own-app/).             |
+
+## Next
+
+- Point the gate at your own app: [Plug in your own app](/guides/own-app/).
+- Run it on every pull request: [Run it in GitHub Actions](/guides/github-actions/).
+- Look at four different failures side by side: [Reference demo](/reference/demo/).
