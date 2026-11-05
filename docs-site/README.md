@@ -17,13 +17,13 @@ Run `npm run build` before `check-links`; it reads `dist/`.
 
 Versions are pinned exactly. `.npmrc` sets `ignore-scripts=true`, so install scripts of dependencies never run, and `min-release-age=7`. Note that npm 11.8 prints "Unknown project config min-release-age" and ignores that key, so the age rule is only enforced by hand: new versions were picked at least two weeks old.
 
-## What is placeholder
+## Site origin
 
-`site` in `astro.config.mjs` is `https://docs.evalgate.example`. It feeds the sitemap, canonical links and `og:image`, and `public/robots.txt` repeats it. Replace both before publishing.
+`site` in `astro.config.mjs` is `https://kelvis-evalgate.vercel.app`. It feeds the sitemap, canonical links and `og:image`, and `public/robots.txt` and `scripts/check-links.mjs` repeat it. Change all three if the site moves to another domain.
 
 ## Deploying
 
-Nothing is deployed and there is no deploy config on purpose: the repository is private and where to host the docs is a later decision. The output is plain static files in `dist/`, so any static host works. `.github/workflows/docs.yml` only builds and checks the site on changes under `docs-site/`.
+The site is deployed on Vercel (Hobby plan) at `https://kelvis-evalgate.vercel.app`. `vercel.json` at the repo root points the build at this folder: `npm ci --prefix docs-site`, `npm run build --prefix docs-site`, output `docs-site/dist`. The output is plain static files, so any static host works. `.github/workflows/docs.yml` builds and checks the site on changes under `docs-site/`.
 
 ## Content rules
 
