@@ -39,7 +39,7 @@ function resolveTarget(pathname) {
   return candidates.find((c) => existsSync(c) && statSync(c).isFile());
 }
 
-const siteOrigin = "https://docs.evalgate.example";
+const siteOrigin = "https://kelvis-evalgate.vercel.app";
 let checked = 0;
 let external = 0;
 const problems = [];

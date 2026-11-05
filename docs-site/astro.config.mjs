@@ -2,10 +2,9 @@ import { defineConfig } from "astro/config";
 import { unified } from "@astrojs/markdown-remark";
 import starlight from "@astrojs/starlight";
 
-// PLACEHOLDER: the repo is private and nothing is deployed yet. Replace this
-// with the real origin before publishing, or the sitemap, canonical links and
-// og:image will point at a domain that does not exist.
-const site = "https://docs.evalgate.example";
+// Origin of the deployed docs. It feeds the sitemap, canonical links and og:image,
+// and public/robots.txt and scripts/check-links.mjs repeat it.
+const site = "https://kelvis-evalgate.vercel.app";
 
 // Wraps a table cell that says exactly PASS or FAIL so CSS can mark it.
 // Small enough to keep here instead of pulling in a plugin.
