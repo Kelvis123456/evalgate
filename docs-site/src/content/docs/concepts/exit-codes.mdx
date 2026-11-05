@@ -1,45 +1,64 @@
 ---
 title: Exit codes
-description: What exit codes 0, 1 and 2 mean in evalgate, the exact error messages behind code 2, and the one case where code 1 is not a regression.
+description: What exit codes 0, 1 and 2 mean in evalgate, the exact error messages behind code 2, and why code 1 only ever means a regression.
 ---
 
 A CI log should say which kind of failure happened, so evalgate uses three codes.
 
-| Code | Meaning                                                                            | Output                                                   |
-| ---- | ---------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `0`  | Every baseline metric is within tolerance, or `evalgate baseline` wrote the file.  | Report on stdout (`run`) or `wrote <path>` (`baseline`). |
-| `1`  | Regression: at least one metric dropped by more than its tolerance, or is missing. | Report on stdout.                                        |
-| `2`  | Bad input. Nothing was compared.                                                   | `evalgate: error: <message>` on stderr.                  |
+| Code | Meaning                                                                                             | Output                                                   |
+| ---- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `0`  | Every baseline metric is within tolerance, or `evalgate baseline` wrote the file.                   | Report on stdout (`run`) or `wrote <path>` (`baseline`). |
+| `1`  | Regression, and nothing else: at least one metric dropped by more than its tolerance or is missing. | Report on stdout.                                        |
+| `2`  | Bad input, or an error outside the gate's verdict. No verdict was reached.                          | `evalgate: error: <message>` on stderr.                  |
 
-## Exit code 2: bad input
+Exit `1` only ever means a regression. Anything that goes wrong outside the comparison, including an exception from your own app, exits `2` with a one-line message and no traceback.
 
-Anything evalgate can recognise as a problem with what you supplied maps to `2`. These messages are real output.
+## Exit code 2: bad input or an error
 
-| Problem                      | Message                                                                                                                |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Malformed JSONL line         | `evalgate: error: bad.jsonl:2: invalid JSON (Expecting value)`                                                         |
-| Duplicate id                 | `evalgate: error: dup.jsonl:2: duplicate question id 'q1' (first seen on line 1)`                                      |
-| Eval set unreadable          | `evalgate: error: cannot read eval set missing.jsonl: No such file or directory`                                       |
-| Missing baseline             | `evalgate: error: baseline not found: nope.json. Create one with 'evalgate baseline' and commit it.`                   |
-| App spec without a colon     | `evalgate: error: bad app spec 'shop', expected module:factory`                                                        |
-| Module cannot be imported    | `evalgate: error: cannot import 'shop': No module named 'shop'`                                                        |
-| Malformed `--param`          | `evalgate: error: bad --param 'top_k', expected key=value`                                                             |
-| Factory rejects a parameter  | `evalgate: error: factory 'shop:build' rejected params {'nope': 1}: build() got an unexpected keyword argument 'nope'` |
-| App returned the wrong shape | `evalgate: error: question q1: app result: 'cited_ids' must be a list of strings`                                      |
-| Negative tolerance           | `evalgate: error: --tolerance must not be negative`                                                                    |
+These messages are real output.
 
-A flag argparse itself rejects, such as `--tolerance abc`, prints a usage message and also exits `2`.
+| Problem                         | Message                                                                                                                                                                                                          |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Malformed JSONL line            | `evalgate: error: bad.jsonl:1: invalid JSON (Expecting ',' delimiter)`                                                                                                                                           |
+| Duplicate id                    | `evalgate: error: dup.jsonl:2: duplicate question id 'q1' (first seen on line 1)`                                                                                                                                |
+| Eval set unreadable             | `evalgate: error: cannot read eval set missing.jsonl: No such file or directory`                                                                                                                                 |
+| Eval set not UTF-8              | `evalgate: error: cannot read eval set bin.jsonl: not valid UTF-8 (invalid start byte at byte 0)`                                                                                                                |
+| Missing baseline                | `evalgate: error: baseline not found: nope.json. Create one with 'evalgate baseline' and commit it.`                                                                                                             |
+| `NaN` in the baseline           | `evalgate: error: baseline: NaN is not allowed, numbers must be finite`                                                                                                                                          |
+| Baseline has no eval set record | `evalgate: error: baseline does not record its eval set; re-run 'evalgate baseline' and commit it`                                                                                                               |
+| Eval set changed                | `evalgate: error: eval set changed since the baseline was written (baseline: 6ccf635a6a7c, 4 questions; now: 1fbb5a576033, 3 questions). Review the change, then run 'evalgate baseline' and commit the result.` |
+| App spec without a colon        | `evalgate: error: bad app spec 'shop', expected module:factory`                                                                                                                                                  |
+| Module cannot be imported       | `evalgate: error: cannot import 'nosuch': ModuleNotFoundError: No module named 'nosuch'`                                                                                                                         |
+| Attribute missing from module   | `evalgate: error: module 'shop' has no attribute 'nosuch'`                                                                                                                                                       |
+| Malformed `--param`             | `evalgate: error: bad --param 'top_k', expected key=value`                                                                                                                                                       |
+| Non-finite `--param`            | `evalgate: error: bad --param value 'nan': numbers must be finite`                                                                                                                                               |
+| Factory rejects a parameter     | `evalgate: error: factory 'shop:build' rejected params {'nope': 1}: got an unexpected keyword argument 'nope'`                                                                                                   |
+| Your app raises                 | `evalgate: error: question q1: app raised RuntimeError: model endpoint timed out`                                                                                                                                |
+| App returned the wrong shape    | `evalgate: error: question q1: app result: 'cited_ids' must be a list of strings`                                                                                                                                |
+| Judge returns a bad score       | `evalgate: error: question q1: judge returned 1.5, expected a number in [0, 1]`                                                                                                                                  |
+| Bad `--tolerance`               | `evalgate: error: --tolerance must be a finite number, not negative`                                                                                                                                             |
+| `baseline` would lower a metric | `evalgate: error: refusing to write a baseline that is lower than the existing baseline: hit_at_k 1.0000 -> 0.9412; ... Pass --allow-regression if that is intended.`                                            |
+| `--with-judge` without a judge  | `evalgate: error: --with-judge needs EVALGATE_JUDGE=module:factory`                                                                                                                                              |
+| Report file not writable        | `evalgate: error: cannot write report nodir/r.md: No such file or directory`                                                                                                                                     |
 
-## Exit code 1: a regression, or a crash in your app
+A flag that argparse itself rejects, such as `--tolerance abc` or a missing command, prints a usage message and also exits `2`.
 
-`1` is what a regression returns, and it is also what Python returns when an exception escapes. evalgate only converts its own input errors to `2`. If your app's `answer()` raises, say a model endpoint times out, the traceback is printed and the exit code is `1`, indistinguishable from a regression by code alone:
+The report file error is raised after the report was printed to stdout, so the table is still in the log.
+
+## A crash in your app is exit 2, not 1
+
+Before the hardening release, an exception inside `answer()` produced a traceback and exit `1`, which a CI job reads as "quality dropped". Now evalgate catches it, names the question and exits `2`:
 
 ```text
-RuntimeError: model endpoint timed out
+evalgate: error: question q1: app raised RuntimeError: model endpoint timed out
 ```
 
-If you need to tell them apart, catch exceptions inside your app and return an empty `answer`, which counts as an abstention and will show up in the metrics, or look for a Python traceback in the log. This is a known gap, see [Limitations](/limitations/).
+The same goes for a factory that raises, a judge that raises, and an import-time error in the module you point `--app` or `EVALGATE_JUDGE` at.
+
+## Getting the traceback
+
+Set `EVALGATE_DEBUG=1` and the exception propagates instead of being summarised, so you see the full traceback. That is a debugging switch, not a CI setting: with it on, an escaped exception makes Python itself exit `1`, so the code no longer tells you "regression" from "crash".
 
 ## Using the codes in CI
 
-Any CI system treats non-zero as failure, so you rarely need to distinguish `1` from `2` in logic. The distinction is for people reading the log: `2` means fix your setup, `1` means your change made answers worse. See [Run it in GitHub Actions](/guides/github-actions/).
+Any CI system treats non-zero as failure, so you rarely need to distinguish `1` from `2` in logic. The distinction is for people reading the log: `2` means fix your setup or your app, `1` means your change made answers worse. See [Run it in GitHub Actions](/guides/github-actions/).

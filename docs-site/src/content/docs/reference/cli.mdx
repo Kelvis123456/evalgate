@@ -3,7 +3,7 @@ title: CLI reference
 description: Every evalgate command and flag with defaults, checked against the real --help output, plus the environment variable and exit codes.
 ---
 
-evalgate has two commands, `run` and `baseline`. You can invoke it as `evalgate` (the console script installed by pip) or `python -m evalgate`. The two behave the same except for one import-path detail, see [Plug in your own app](/guides/own-app/).
+evalgate has two commands, `run` and `baseline`. You can invoke it as `evalgate` (the console script installed by pip) or `python -m evalgate`. Both put the current directory on `sys.path` explicitly, so `--app mymodule:build` resolves the same way either way. See [Plug in your own app](/guides/own-app/).
 
 ```text title="evalgate --help"
 usage: evalgate [-h] [--version] {run,baseline} ...
@@ -21,6 +21,8 @@ options:
 ```
 
 `evalgate --version` prints `evalgate 0.1.0`. A command is required. Running `evalgate` alone prints a usage error and exits `2`.
+
+The `--evalset`, `--baseline`, `--app` and `--param` flags exist on both commands. `--tolerance` exists on both too, but means something different: on `run` it overrides every tolerance, on `baseline` it sets the default tolerance that is written.
 
 ## `evalgate run`
 
@@ -43,18 +45,18 @@ options:
                         also write the Markdown report here
 ```
 
-| Flag                   | Default                 | Behaviour                                                                                                                                                                                  |
-| ---------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--evalset PATH`       | `evals/questions.jsonl` | The [eval set](/concepts/eval-set/). Relative to the current directory.                                                                                                                    |
-| `--baseline PATH`      | `baseline.json`         | The [baseline](/concepts/baseline-and-tolerance/) to compare against. Missing file exits `2`.                                                                                              |
-| `--app MODULE:FACTORY` | `evalgate.refapp:build` | The app factory, see [Plug in your own app](/guides/own-app/).                                                                                                                             |
-| `--param KEY=VALUE`    | none                    | Keyword argument passed to the factory. Repeatable. Values become `int`, then `float`, then `true`/`false` booleans, else stay strings. A pair without `=` or with an empty key exits `2`. |
-| `--tolerance X`        | from the baseline       | A float that replaces every tolerance, including per-metric values. Negative exits `2`. A non-number is rejected by argument parsing, also exit `2`.                                       |
-| `--report-file PATH`   | none                    | Also write the Markdown report to this path, as UTF-8. The report still goes to stdout.                                                                                                    |
+| Flag                   | Default                 | Behaviour                                                                                                                                                                                                                                  |
+| ---------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--evalset PATH`       | `evals/questions.jsonl` | The [eval set](/concepts/eval-set/). Relative to the current directory.                                                                                                                                                                    |
+| `--baseline PATH`      | `baseline.json`         | The [baseline](/concepts/baseline-and-tolerance/) to compare against. Missing file exits `2`.                                                                                                                                              |
+| `--app MODULE:FACTORY` | `evalgate.refapp:build` | The app factory, see [Plug in your own app](/guides/own-app/).                                                                                                                                                                             |
+| `--param KEY=VALUE`    | none                    | Keyword argument passed to the factory. Repeatable. Values become `int`, then `float`, then a boolean (`true` or `false` in any case), else stay strings. `nan` and `inf` are rejected. A pair without `=` or with an empty key exits `2`. |
+| `--tolerance X`        | from the baseline       | A finite float that replaces every tolerance, including per-metric values. Negative, `nan` or `inf` exits `2`. A non-number is rejected by argument parsing, also exit `2`.                                                                |
+| `--report-file PATH`   | none                    | Also write the Markdown report to this path, as UTF-8. The report still goes to stdout.                                                                                                                                                    |
 
-`run` reads `k` from the baseline (default `3`), so `hit_at_k` is computed with the same `k` the baseline used.
+`run` reads `k` from the baseline (default `3`), so `hit_at_k` is computed with the same `k` the baseline used. Before running the app it checks that the eval set matches the sha256 and question count stored in the baseline, and exits `2` if it does not.
 
-Exit codes: `0` pass, `1` regression, `2` bad input. See [Exit codes](/concepts/exit-codes/).
+Exit codes: `0` pass, `1` regression only, `2` bad input or an error in the app, factory, judge or files. See [Exit codes](/concepts/exit-codes/).
 
 ## `evalgate baseline`
 
@@ -62,28 +64,50 @@ Run the eval set and write a new baseline.
 
 ```text title="evalgate baseline --help"
 usage: evalgate baseline [-h] [--evalset EVALSET] [--baseline BASELINE]
-                         [--app APP] [--param KEY=VALUE]
+                         [--app APP] [--param KEY=VALUE] [--k K]
+                         [--tolerance TOLERANCE] [--allow-regression]
+                         [--with-judge]
 
 options:
-  -h, --help           show this help message and exit
+  -h, --help            show this help message and exit
   --evalset EVALSET
   --baseline BASELINE
-  --app APP            module:factory (default: reference app)
-  --param KEY=VALUE    keyword argument for the app factory, repeatable
+  --app APP             module:factory (default: reference app)
+  --param KEY=VALUE     keyword argument for the app factory, repeatable
+  --k K                 k for hit_at_k (default: keep the existing baseline's
+                        k, else 3)
+  --tolerance TOLERANCE
+                        default tolerance (default: keep the existing one,
+                        else 0.02)
+  --allow-regression    write the baseline even if a metric is lower than the
+                        existing one
+  --with-judge          run the EVALGATE_JUDGE judge and store judge_score
 ```
 
-`--evalset`, `--baseline`, `--app` and `--param` have the same meaning and defaults as in `run`. Here `--baseline` is the file that gets written. On success it prints `wrote <path>` and exits `0`. It writes `k` as `3`, the default tolerance as `0.02` and an empty `tolerances` object every time, discarding any values already in the file. See [Update the baseline](/guides/update-baseline/).
+`--evalset`, `--baseline`, `--app` and `--param` have the same meaning and defaults as in `run`. Here `--baseline` is the file that gets written, and the one it reads to keep the existing settings. On success it prints `wrote <path>` and exits `0`.
 
-`baseline` has no `--tolerance` and no `--report-file`.
+| Flag                 | Default                                   | Behaviour                                                                                                                                                                                   |
+| -------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--k N`              | existing baseline's `k`, else `3`         | The `k` for `hit_at_k`. Must be at least 1.                                                                                                                                                 |
+| `--tolerance X`      | existing `default_tolerance`, else `0.02` | The default tolerance to write. Must be finite and not negative. Per-metric `tolerances` in the existing file are kept as they are.                                                         |
+| `--allow-regression` | off                                       | Without it, the command refuses (exit `2`) to write a baseline in which any metric is lower than in the existing file, or is missing from this run. With it, the lower numbers are written. |
+| `--with-judge`       | off                                       | Runs the judge from `EVALGATE_JUDGE` and writes `judge_score`. Without the flag `judge_score` is never written. Exits `2` if the variable is not set.                                       |
+
+The new file also records the sha256 and question count of the eval set. `baseline` has no `--report-file`. See [Update the baseline](/guides/update-baseline/).
 
 ## Environment
 
-| Variable         | Effect                                                                                                                                                                        |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EVALGATE_JUDGE` | `module:factory`. When set, loads a judge and adds a `judge_score` metric to the run. Read by both commands. Unset by default. See [Metrics](/concepts/metrics/#judge_score). |
+| Variable         | Effect                                                                                                                                                                                                                                                                |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EVALGATE_JUDGE` | `module:factory`. When set, `run` loads a judge and adds a `judge_score` metric. `baseline` reads it only with `--with-judge`. Importing the module runs its import-time code with your permissions. Unset by default. See [Metrics](/concepts/metrics/#judge_score). |
+| `EVALGATE_DEBUG` | Any non-empty value. Errors propagate with a full traceback instead of the one-line `evalgate: error: ...` message. Python then exits `1`, so do not use it in CI.                                                                                                    |
 
 ## Output streams
 
 - The report goes to **stdout**.
 - Errors go to **stderr** as `evalgate: error: <message>`.
 - `baseline` prints a single `wrote <path>` line to stdout.
+
+## Trust
+
+`--app` and `EVALGATE_JUDGE` name Python modules that evalgate imports. Importing runs the module's top-level code with your permissions, before any check. Only point them at code you trust.

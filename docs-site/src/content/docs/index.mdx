@@ -25,13 +25,14 @@ Prompt and retriever changes tend to merge with "looks fine on the three example
 | hit_at_k | 1.0000 | 0.9412 | -0.0588 | 0.0200 | FAIL |
 | mrr | 0.9853 | 0.8725 | -0.1127 | 0.0200 | FAIL |
 | citation_correct | 0.9412 | 0.5000 | -0.4412 | 0.0200 | FAIL |
+| citation_precision | 0.9024 | 0.5854 | -0.3171 | 0.0200 | FAIL |
 | answer_contains_fact | 0.8824 | 0.5000 | -0.3824 | 0.0200 | FAIL |
 | abstention_accuracy | 0.7143 | 1.0000 | +0.2857 | 0.0200 | PASS |
 
-Regressed beyond tolerance: hit_at_k, mrr, citation_correct, answer_contains_fact.
+Regressed beyond tolerance: hit_at_k, mrr, citation_correct, citation_precision, answer_contains_fact.
 ```
 
-You keep two things in your repo: an eval set in JSONL (questions plus the passage ids and fact a correct answer must contain) and a `baseline.json` of scores. `evalgate run` executes the set against your app, compares each metric with the baseline, prints a Markdown table, and exits `1` if any metric dropped by more than its tolerance.
+You keep two things in your repo: an eval set in JSONL (questions plus the passage ids and fact a correct answer must contain) and a `baseline.json` of scores. `evalgate run` executes the set against your app, compares each metric with the baseline, prints a Markdown table, and exits `1` if any metric dropped by more than its tolerance. Exit `2` is reserved for bad input or an error in your app, so a crash never looks like a regression.
 
 It has no runtime dependencies, makes no network calls in its default path, and gives the same result every time. That is deliberate: a gate that needs an API key or varies between runs gets ignored.
 
@@ -43,7 +44,8 @@ It has no runtime dependencies, makes no network calls in its default path, and 
 - **Deciding whether to trust it?** Read the [limitations](/limitations/) first. The metrics are lexical and the bundled app is a toy.
 
 <Aside type="note" title="Status">
-  Version 0.1.0. The GitHub Actions workflows in the repository have not run on
-  GitHub yet, because nothing has been pushed. Everything on this site was
-  produced by running the code locally.
+  Version 0.1.0, after an independent audit that made the gate harder to game
+  (see the [changelog](/changelog/)). The `ci` and `security` workflows have run
+  green on GitHub. The tables on this site were produced by running the code
+  locally. The bundled app is deterministic; a real LLM app may not be.
 </Aside>
