@@ -17,7 +17,7 @@ def load_corpus() -> list[Passage]:
 
 
 # "how long / how many" style questions want a number, so sentences with a digit get a bonus.
-_QUANTITY = re.compile(r"(how (long|many|far|quickly|often|fast|much)|after how)", re.I)
+_QUANTITY = re.compile(r"\b(how (long|many|far|quickly|often|fast|much)|after how)\b", re.I)
 _DIGIT_BONUS = 0.3
 
 
