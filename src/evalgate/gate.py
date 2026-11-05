@@ -26,11 +26,12 @@ class Baseline:
 @dataclass(frozen=True)
 class Row:
     metric: str
-    baseline: float
+    baseline: float | None
     current: float | None
     delta: float | None
-    tolerance: float
+    tolerance: float | None
     passed: bool
+    new: bool = False  # produced by the run but absent from the baseline, so not gated
 
 
 def _num(value: object, what: str) -> float:
@@ -146,6 +147,11 @@ def compare(baseline: Baseline, current: dict[str, float | None],
             raise EvalGateError(f"metric '{name}' is {cur}, metrics must be finite")
         delta = round(cur - base, 6)
         rows.append(Row(name, base, cur, delta, tol, round(-delta, 6) <= tol))
+    for name, cur in current.items():
+        if name not in baseline.metrics and cur is not None:
+            if not math.isfinite(cur):
+                raise EvalGateError(f"metric '{name}' is {cur}, metrics must be finite")
+            rows.append(Row(name, None, cur, None, None, True, new=True))
     return rows
 
 
@@ -165,10 +171,10 @@ def render_markdown(rows: list[Row]) -> str:
     for r in rows:
         cur = "missing" if r.current is None else f"{r.current:.4f}"
         delta = "n/a" if r.delta is None else f"{r.delta:+.4f}"
-        lines.append(
-            f"| {r.metric} | {r.baseline:.4f} | {cur} | {delta} | {r.tolerance:.4f} | "
-            f"{'PASS' if r.passed else 'FAIL'} |"
-        )
+        base = "n/a" if r.baseline is None else f"{r.baseline:.4f}"
+        tol = "n/a" if r.tolerance is None else f"{r.tolerance:.4f}"
+        status = "new (not gated)" if r.new else ("PASS" if r.passed else "FAIL")
+        lines.append(f"| {r.metric} | {base} | {cur} | {delta} | {tol} | {status} |")
     lines.append("")
     if ok:
         lines.append("No metric dropped more than its tolerance below the baseline.")
